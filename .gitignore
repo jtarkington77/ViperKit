@@ -1,0 +1,39 @@
+# ---- OS noise (Windows / general) ----
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+
+# ---- Editor / IDE settings ----
+.vscode/
+.idea/
+*.code-workspace
+*.suo
+*.user
+*.userossc
+*.sln.docstates
+
+# ---- ViperKit runtime output ----
+logs/
+quarantine/
+reports/
+exports/
+tmp/
+cache/
+
+# ---- Build / packaging output ----
+bin/
+obj/
+out/
+dist/
+build/
+publish/
+*.exe
+*.msi
+*.zip
+
+# ---- PowerShell backup files ----
+*.ps1~
+*.psm1~
+*.psd1~
+*.bak
