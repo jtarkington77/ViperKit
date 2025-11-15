@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Security.Cryptography;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
@@ -55,6 +56,10 @@ public partial class MainWindow
                 HandleDomainHunt(iocText);
                 break;
 
+            case "Hash":
+                HandleHashHunt(iocText);
+                break;
+
             default:
                 HuntResultsText.Text =
                     $"(demo) Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
@@ -81,8 +86,7 @@ public partial class MainWindow
         string noSpaces = trimmed.Replace(" ", string.Empty);
 
         // Windows path (C:\ or \\server\share)
-        if (trimmed.Contains(@":\") || lowered.StartsWith(@"\\"))
-            return "FilePath";
+        if (trimmed.Contains(@":\") || lowered.StartsWith(@"\\")) return "FilePath";
 
         // Registry-style
         if (lowered.StartsWith("hklm\\") ||
@@ -102,9 +106,8 @@ public partial class MainWindow
         // IP-ish: 3 dots and only digits/dots
         int dotCount = 0;
         foreach (char c in trimmed)
-        {
             if (c == '.') dotCount++;
-        }
+
         if (dotCount == 3 && IsIpLike(trimmed))
             return "IpAddress";
 
@@ -339,11 +342,11 @@ public partial class MainWindow
 
             RegistryKey? root = hivePart.ToUpperInvariant() switch
             {
-                "HKLM" or "HKEY_LOCAL_MACHINE"      => Registry.LocalMachine,
-                "HKCU" or "HKEY_CURRENT_USER"       => Registry.CurrentUser,
-                "HKCR" or "HKEY_CLASSES_ROOT"       => Registry.ClassesRoot,
-                "HKU"  or "HKEY_USERS"              => Registry.Users,
-                "HKCC" or "HKEY_CURRENT_CONFIG"     => Registry.CurrentConfig,
+                "HKLM" or "HKEY_LOCAL_MACHINE"  => Registry.LocalMachine,
+                "HKCU" or "HKEY_CURRENT_USER"   => Registry.CurrentUser,
+                "HKCR" or "HKEY_CLASSES_ROOT"   => Registry.ClassesRoot,
+                "HKU"  or "HKEY_USERS"          => Registry.Users,
+                "HKCC" or "HKEY_CURRENT_CONFIG" => Registry.CurrentConfig,
                 _ => null
             };
 
@@ -371,9 +374,9 @@ public partial class MainWindow
 
                 string valueDisplay = value switch
                 {
-                    string s        => s,
-                    string[] arr    => string.Join(", ", arr),
-                    _               => value?.ToString() ?? "(null)"
+                    string s     => s,
+                    string[] arr => string.Join(", ", arr),
+                    _            => value?.ToString() ?? "(null)"
                 };
 
                 valueLines.Add($"    {valueName} ({kind}): {valueDisplay}");
@@ -406,6 +409,234 @@ public partial class MainWindow
                 $"Error while reading registry key:\n  {ex.Message}";
         }
 #pragma warning restore CA1416
+    }
+
+    // ---- Hash hunt (with optional disk sweep) ----
+    private void HandleHashHunt(string hash)
+    {
+        if (string.IsNullOrWhiteSpace(hash))
+        {
+            HuntResultsText.Text = "Hash IOC was empty.";
+            return;
+        }
+
+        string original   = hash.Trim();
+        string normalized = original.Replace(" ", "").ToLowerInvariant();
+
+        string kind;
+        bool   canScanDisk = false;
+
+        switch (normalized.Length)
+        {
+            case 32:
+                kind        = "MD5 (32 hex chars)";
+                canScanDisk = true;
+                break;
+            case 40:
+                kind        = "SHA-1 (40 hex chars)";
+                canScanDisk = false; // we won't scan disk on SHA-1 for now
+                break;
+            case 64:
+                kind        = "SHA-256 (64 hex chars)";
+                canScanDisk = true;
+                break;
+            default:
+                kind        = $"Unknown / non-standard length ({normalized.Length} chars)";
+                canScanDisk = false;
+                break;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Hash IOC: {original}");
+        sb.AppendLine($"Normalized: {normalized}");
+        sb.AppendLine($"Detected type: {kind}");
+        sb.AppendLine();
+
+        // Optional disk sweep if a scope folder is set
+        string? scopeFolder = HuntScopeFolderInput?.Text?.Trim();
+        if (canScanDisk && !string.IsNullOrWhiteSpace(scopeFolder) && Directory.Exists(scopeFolder))
+        {
+            sb.AppendLine($"Disk scan scope: {scopeFolder}");
+            sb.AppendLine();
+
+            int matchCount = 0;
+            var matches = new List<string>();
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(scopeFolder, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        using var stream = File.OpenRead(file);
+                        byte[] hashBytes;
+
+                        if (normalized.Length == 32)
+                        {
+                            hashBytes = MD5.HashData(stream);
+                        }
+                        else // 64
+                        {
+                            hashBytes = SHA256.HashData(stream);
+                        }
+
+                        string fileHash = BitConverter.ToString(hashBytes)
+                            .Replace("-", "")
+                            .ToLowerInvariant();
+
+                        if (fileHash == normalized)
+                        {
+                            matchCount++;
+                            matches.Add(file);
+                        }
+                    }
+                    catch
+                    {
+                        // Skip unreadable files, don't kill the scan
+                    }
+                }
+
+                if (matchCount == 0)
+                {
+                    sb.AppendLine("Disk scan: no matching files found under scope.");
+                }
+                else
+                {
+                    sb.AppendLine($"Disk scan: {matchCount} matching file(s) found:");
+                    foreach (var m in matches)
+                        sb.AppendLine($"  {m}");
+                }
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"Disk scan error: {ex.Message}");
+            }
+        }
+        else
+        {
+            sb.AppendLine("Disk scan: (not run).");
+            if (!canScanDisk)
+                sb.AppendLine("Reason: only MD5 (32 chars) and SHA-256 (64 chars) are supported for disk scanning right now.");
+            else
+                sb.AppendLine("Reason: no valid scope folder set. Use the Scope folder row above to pick a directory.");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("(demo) Future builds: pivot hash into VT/OSINT, correlate across hosts/files, etc.");
+
+        HuntResultsText.Text = sb.ToString();
+
+        LogHashObserved(normalized, kind);
+    }
+
+    private void LogHashObserved(string normalizedHash, string kind)
+    {
+        try
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string logDir  = Path.Combine(baseDir, "logs");
+            Directory.CreateDirectory(logDir);
+
+            string logPath = Path.Combine(logDir, "Hashes.log");
+            string line    = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\t{kind}\t{normalizedHash}";
+
+            File.AppendAllLines(logPath, new[] { line });
+        }
+        catch
+        {
+            // Logging must never break UI
+        }
+    }
+
+    // ---- Hunt utility actions: Copy / Save / Clear ----
+
+    private async void HuntCopyResultsButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var text = HuntResultsText?.Text ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            HuntStatusText.Text = "Status: nothing to copy.";
+            return;
+        }
+
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.Clipboard is not null)
+            {
+                await topLevel.Clipboard.SetTextAsync(text);
+                HuntStatusText.Text = "Status: hunt results copied to clipboard.";
+            }
+            else
+            {
+                HuntStatusText.Text = "Status: clipboard not available.";
+            }
+        }
+        catch (Exception ex)
+        {
+            HuntStatusText.Text = $"Status: error copying to clipboard – {ex.Message}";
+        }
+    }
+
+    private void HuntSaveResultsButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var text = HuntResultsText?.Text ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            HuntStatusText.Text = "Status: nothing to save.";
+            return;
+        }
+
+        try
+        {
+            string baseDir     = AppContext.BaseDirectory;
+            string snapshotDir = Path.Combine(baseDir, "logs", "HuntSnapshots");
+            Directory.CreateDirectory(snapshotDir);
+
+            string stamp    = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string fileName = $"Hunt_{stamp}.txt";
+            string fullPath = Path.Combine(snapshotDir, fileName);
+
+            File.WriteAllText(fullPath, text, Encoding.UTF8);
+            HuntStatusText.Text = $"Status: results saved to {fileName}.";
+        }
+        catch (Exception ex)
+        {
+            HuntStatusText.Text = $"Status: error saving snapshot – {ex.Message}";
+        }
+    }
+
+    private void HuntClearButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        HuntResultsText.Text = string.Empty;
+        HuntStatusText.Text  = "Status: cleared.";
+    }
+
+    // ---- Browse for scope folder ----
+    private async void HuntBrowseScopeButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select scope folder for hash / file hunts"
+            };
+
+            // MainWindow *is* a Window, so we can use it directly
+            string? path = await dialog.ShowAsync(this);
+
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                HuntScopeFolderInput.Text = path;
+                HuntStatusText.Text       = "Status: scope folder updated.";
+            }
+        }
+        catch (Exception ex)
+        {
+            HuntStatusText.Text = $"Status: error opening folder dialog – {ex.Message}";
+        }
     }
 
     // ---- Logging ----

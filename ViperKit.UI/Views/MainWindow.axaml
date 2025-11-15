@@ -98,100 +98,90 @@
         </Border>
       </TabItem>
 
-        <!-- HUNT -->
-        <TabItem Header="Hunt">
-          <Border Background="#050E10" Padding="20">
-            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+                <!-- HUNT -->
+                <TabItem Header="Hunt">
+                  <Border Background="#0B1518" Padding="16">
+                    <!-- 5 rows now: IOC, status, scope, buttons, results -->
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
 
-              <!-- TITLE + DESCRIPTION -->
-              <StackPanel Orientation="Vertical">
-                <TextBlock Text="IOC Hunt"
-                          FontSize="20"
-                          FontWeight="SemiBold"
-                          Foreground="#EAF7F7" />
-                <TextBlock Text="Paste a hash, path, domain, IP, or registry key. ViperKit will fan out across filesystem, registry, tasks, services, and WMI (once wired)."
-                          FontSize="13"
-                          Foreground="#8FA9AA"
-                          Margin="0,4,0,0"
-                          TextWrapping="Wrap" />
-              </StackPanel>
+                      <!-- IOC input + type + run -->
+                      <StackPanel Grid.Row="0"
+                                  Orientation="Horizontal"
+                                  Spacing="8">
+                        <TextBox x:Name="HuntIocInput"
+                                Width="420"
+                                Watermark="Paste path, hash, domain, IP, registry key..." />
 
-              <!-- INPUT ROW -->
-              <Grid Grid.Row="1"
-                    ColumnDefinitions="*,Auto"
-                    RowDefinitions="Auto,Auto"
-                    RowSpacing="6"
-                    ColumnSpacing="8">
+                        <ComboBox x:Name="HuntIocType"
+                                  Width="170">
+                          <ComboBoxItem Content="Auto"      />
+                          <ComboBoxItem Content="File path" />
+                          <ComboBoxItem Content="Hash"      />
+                          <ComboBoxItem Content="Domain/URL"/>
+                          <ComboBoxItem Content="IP address"/>
+                          <ComboBoxItem Content="Registry"  />
+                        </ComboBox>
 
-                <!-- IOC TEXTBOX -->
-                <StackPanel Grid.Row="0" Grid.Column="0">
-                  <TextBlock Text="Indicator of Compromise"
-                            FontSize="13"
-                            Foreground="#C7D4D4" />
-                  <TextBox x:Name="HuntIocInput"
-                          Margin="0,4,0,0"
-                          FontSize="13"
-                          Watermark="e.g. file hash, C:\path\to\file.exe, bad-domain.com, 1.2.3.4, HKCU\Software\..."
-                          />
-                </StackPanel>
+                        <Button x:Name="HuntRunButton"
+                                Content="Run Hunt"
+                                Width="110"
+                                Click="HuntRunButton_OnClick" />
+                      </StackPanel>
 
-                <!-- TYPE SELECT + BUTTON -->
-                <StackPanel Grid.Row="0"
-                            Grid.Column="1"
-                            Orientation="Vertical"
-                            HorizontalAlignment="Right"
-                            Spacing="4">
-                  <ComboBox x:Name="HuntIocType"
-                            Width="160"
-                            SelectedIndex="0">
-                    <ComboBoxItem Content="Auto-detect" />
-                    <ComboBoxItem Content="File / Path" />
-                    <ComboBoxItem Content="Hash" />
-                    <ComboBoxItem Content="Domain / URL" />
-                    <ComboBoxItem Content="IP Address" />
-                    <ComboBoxItem Content="Registry" />
-                  </ComboBox>
-                  <Button x:Name="HuntRunButton"
-                          Content="Run Hunt"
-                          Width="160"
-                          Click="HuntRunButton_OnClick" />
-                </StackPanel>
+                      <!-- Status line -->
+                      <TextBlock x:Name="HuntStatusText"
+                                Grid.Row="1"
+                                Text="Status: idle."
+                                Foreground="#C7D4D4" />
 
-                <!-- STATUS TEXT (PLACEHOLDER) -->
-                <TextBlock x:Name="HuntStatusText"
-                          Grid.Row="1"
-                          Grid.Column="0"
-                          Grid.ColumnSpan="2"
-                          Text="Status: idle – no hunt executed yet."
-                          FontSize="12"
-                          Foreground="#8FA9AA"
-                          Margin="0,4,0,0" />
-              </Grid>
+                      <!-- Scope folder row -->
+                      <StackPanel Grid.Row="2"
+                                  Orientation="Horizontal"
+                                  Spacing="8">
+                        <TextBlock Text="Scope folder:"
+                                  VerticalAlignment="Center"
+                                  Foreground="#C7D4D4" />
+                        <TextBox x:Name="HuntScopeFolderInput"
+                                Width="420"
+                                Watermark="Optional: folder to scan for matching files" />
+                        <Button x:Name="HuntBrowseScopeButton"
+                                Content="Browse..."
+                                Width="100"
+                                Click="HuntBrowseScopeButton_OnClick" />
+                      </StackPanel>
 
-              <!-- RESULTS AREA (NO DATAGRID YET) -->
-              <Border Grid.Row="2"
-                      Background="#0B1518"
-                      CornerRadius="6"
-                      Padding="10"
-                      BorderBrush="#1A3C3F"
-                      BorderThickness="1">
-                <StackPanel Orientation="Vertical" Spacing="4">
-                  <TextBlock Text="Results"
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="#EAF7F7" />
-                  <TextBlock x:Name="HuntResultsText"
-                            Text="No results yet. Once IOC hunting is wired, matches will be listed here."
-                            FontSize="13"
-                            Foreground="#C7D4D4"
-                            TextWrapping="Wrap" />
-                </StackPanel>
-              </Border>
+                      <!-- Action buttons under status -->
+                      <StackPanel Grid.Row="3"
+                                  Orientation="Horizontal"
+                                  Spacing="8">
+                        <Button x:Name="HuntCopyResultsButton"
+                                Content="Copy Results"
+                                Width="120"
+                                Click="HuntCopyResultsButton_OnClick" />
 
-            </Grid>
-          </Border>
-        </TabItem>
+                        <Button x:Name="HuntSaveResultsButton"
+                                Content="Save Snapshot"
+                                Width="130"
+                                Click="HuntSaveResultsButton_OnClick" />
 
+                        <Button x:Name="HuntClearButton"
+                                Content="Clear"
+                                Width="80"
+                                Click="HuntClearButton_OnClick" />
+                      </StackPanel>
+
+                      <!-- Results area -->
+                      <TextBox x:Name="HuntResultsText"
+                              Grid.Row="4"
+                              AcceptsReturn="True"
+                              IsReadOnly="True"
+                              TextWrapping="Wrap"
+                              FontFamily="Consolas"
+                              Background="#05090A"
+                              Foreground="#E4F3F3" />
+                    </Grid>
+                  </Border>
+                </TabItem>
 
         <!-- PERSIST -->
         <TabItem Header="Persist">
