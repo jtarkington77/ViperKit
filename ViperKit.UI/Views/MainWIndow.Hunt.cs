@@ -8,11 +8,18 @@ using System.Security.Cryptography;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
+using System.Net.Http;
+
 
 namespace ViperKit.UI.Views;
 
 public partial class MainWindow
 {
+    private static readonly HttpClient HttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(3)
+    };
+    
     // =========================
     // HUNT TAB
     // =========================
@@ -36,7 +43,7 @@ public partial class MainWindow
         LogHuntAction(iocText, effectiveType);
 
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        HuntStatusText.Text = $"Status: (demo) {effectiveType} hunt executed at {timestamp}.";
+        HuntStatusText.Text = $"Status:  {effectiveType} hunt executed at {timestamp}.";
 
         switch (effectiveType)
         {
@@ -62,7 +69,7 @@ public partial class MainWindow
 
             default:
                 HuntResultsText.Text =
-                    $"(demo) Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
+                    $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
                     "This IOC type is not wired yet.";
                 break;
         }
@@ -165,7 +172,7 @@ public partial class MainWindow
                     $"  Path: {dirInfo.FullName}\n" +
                     $"  Files: {fileCount}\n" +
                     $"  Approx. size: {totalSize} bytes\n\n" +
-                    "(demo) Future builds: walk this tree for artifacts, suspicious names, etc.";
+                    "Future builds: walk this tree for artifacts, suspicious names, etc.";
                 return;
             }
 
@@ -173,15 +180,57 @@ public partial class MainWindow
             if (File.Exists(path))
             {
                 var info = new FileInfo(path);
-                HuntResultsText.Text =
-                    $"File found:\n" +
-                    $"  Path: {info.FullName}\n" +
-                    $"  Size: {info.Length} bytes\n" +
-                    $"  Created: {info.CreationTime}\n" +
-                    $"  Modified: {info.LastWriteTime}\n\n" +
-                    "(demo) Future builds: hash + correlate against other sources.";
+
+                string md5Hex    = "(error)";
+                string sha256Hex = "(error)";
+
+                try
+                {
+                    using var stream = File.OpenRead(path);
+
+                    // MD5
+                    using (var md5 = MD5.Create())
+                    {
+                        var md5Bytes = md5.ComputeHash(stream);
+                        md5Hex = Convert.ToHexString(md5Bytes);
+                    }
+
+                    // Reset stream for second hash
+                    stream.Position = 0;
+
+                    // SHA-256
+                    using (var sha = SHA256.Create())
+                    {
+                        var shaBytes = sha.ComputeHash(stream);
+                        sha256Hex = Convert.ToHexString(shaBytes);
+                    }
+
+                    // Log both hashes so they show up in Hashes.log as well
+                    LogHashObserved(md5Hex.ToLowerInvariant(),  "MD5 (file path hunt)");
+                    LogHashObserved(sha256Hex.ToLowerInvariant(), "SHA-256 (file path hunt)");
+                }
+                catch (Exception ex)
+                {
+                    // If hashing fails, we still show file metadata
+                    md5Hex    = $"(error computing hash: {ex.Message})";
+                    sha256Hex = "(not computed)";
+                }
+
+                var sb = new StringBuilder();
+                sb.AppendLine("File found:");
+                sb.AppendLine($"  Path:     {info.FullName}");
+                sb.AppendLine($"  Size:     {info.Length} bytes");
+                sb.AppendLine($"  Created:  {info.CreationTime}");
+                sb.AppendLine($"  Modified: {info.LastWriteTime}");
+                sb.AppendLine();
+                sb.AppendLine("Hashes:");
+                sb.AppendLine($"  MD5:      {md5Hex}");
+                sb.AppendLine($"  SHA-256:  {sha256Hex}");
+
+                HuntResultsText.Text = sb.ToString();
                 return;
             }
+
 
             // Neither file nor directory exists
             HuntResultsText.Text =
@@ -254,15 +303,16 @@ public partial class MainWindow
         }
 
         sb.AppendLine();
-        sb.AppendLine("(demo) Future builds: correlate IP against threat intel feeds, geo, ASN, etc.");
+        sb.AppendLine("Future builds: correlate IP against threat intel feeds, geo, ASN, etc.");
 
         HuntResultsText.Text = sb.ToString();
     }
 
     // ---- Domain / URL hunt ----
-    private void HandleDomainHunt(string ioc)
+    private async void HandleDomainHunt(string ioc)
     {
-        string host = ioc.Trim();
+        string original = ioc ?? string.Empty;
+        string host     = original.Trim();
 
         // Try to extract host from URL if needed
         if (Uri.TryCreate(host, UriKind.Absolute, out var uri))
@@ -278,16 +328,16 @@ public partial class MainWindow
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            HuntResultsText.Text =
-                $"Could not parse host from: \"{ioc}\"";
+            HuntResultsText.Text = $"Could not parse host from: \"{original}\"";
             return;
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Domain / URL IOC: {ioc}");
+        sb.AppendLine($"Domain / URL IOC: {original}");
         sb.AppendLine($"Host parsed:      {host}");
         sb.AppendLine();
 
+        // --- DNS resolution ---
         try
         {
             var addresses = Dns.GetHostAddresses(host);
@@ -309,10 +359,45 @@ public partial class MainWindow
         }
 
         sb.AppendLine();
-        sb.AppendLine("(demo) Future builds: pivot from this host into IP hunt, WHOIS, HTTP banner grabs, etc.");
+        sb.AppendLine("HTTP probe (best effort):");
+
+        // Build something we can actually request
+        string urlToCheck = original.Trim();
+
+        if (!urlToCheck.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !urlToCheck.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            urlToCheck = "http://" + host;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, urlToCheck);
+            request.Headers.UserAgent.ParseAdd("ViperKit/0.1");
+
+            using var response = await HttpClient.SendAsync(request);
+
+            sb.AppendLine($"  URL:    {urlToCheck}");
+            sb.AppendLine($"  Status: {(int)response.StatusCode} {response.ReasonPhrase}");
+
+            if (response.Headers.TryGetValues("Server", out var serverValues))
+            {
+                sb.AppendLine($"  Server: {string.Join(", ", serverValues)}");
+            }
+
+            if (response.Content.Headers.ContentType is not null)
+            {
+                sb.AppendLine($"  Content-Type: {response.Content.Headers.ContentType}");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  Error making HTTP request: {ex.Message}");
+        }
 
         HuntResultsText.Text = sb.ToString();
     }
+
 
     // ---- Registry hunt ----
     private void HandleRegistryHunt(string regPath)
@@ -522,7 +607,7 @@ public partial class MainWindow
         }
 
         sb.AppendLine();
-        sb.AppendLine("(demo) Future builds: pivot hash into VT/OSINT, correlate across hosts/files, etc.");
+        sb.AppendLine("Future builds: pivot hash into VT/OSINT, correlate across hosts/files, etc.");
 
         HuntResultsText.Text = sb.ToString();
 
