@@ -196,21 +196,51 @@
         <!-- PERSIST -->
         <TabItem Header="Persist">
           <Border Background="#0B1518" Padding="16">
-            <StackPanel>
+            <StackPanel Spacing="12">
+
               <TextBlock Text="Persistence Map"
                         FontSize="20"
                         FontWeight="SemiBold"
                         Foreground="#EAF7F7" />
-              <TextBlock Text="This tab will enumerate deep autoruns and persistence mechanisms: IFEO, AppCertDlls, Winlogon, LSA, services, tasks, WMI, COM, startup folders, and more."
+
+              <TextBlock Text="Enumerate basic autorun locations (HKCU/HKLM Run and RunOnce)."
                         FontSize="13"
                         Foreground="#C7D4D4"
-                        Margin="0,8,0,0"
                         TextWrapping="Wrap" />
-              <TextBlock Text="For now this is a layout placeholder only; collection logic will be implemented in a later milestone."
+
+              <Button x:Name="PersistRunButton"
+                      Content="Enumerate Autoruns (HKCU/HKLM Run*)"
+                      Width="260"
+                      HorizontalAlignment="Left"
+                      Click="PersistRunButton_OnClick" />
+
+              <TextBlock x:Name="PersistStatusText"
+                        Text="Status: idle."
                         FontSize="12"
                         Foreground="#8FA9AA"
-                        Margin="0,12,0,0"
-                        TextWrapping="Wrap" />
+                        Margin="0,4,0,0" />
+
+              <Border Background="#050E10"
+                      Padding="8"
+                      CornerRadius="4"
+                      BorderBrush="#1A3C3F"
+                      BorderThickness="1"
+                      Margin="0,8,0,0">
+
+                <StackPanel>
+                  <TextBlock Text="Results"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="#EAF7F7"
+                            Margin="0,0,0,6" />
+
+                  <ListBox x:Name="PersistResultsList"
+                          Height="260"
+                          Background="#050E10"
+                          BorderThickness="0"
+                          Foreground="#C7D4D4" />
+                </StackPanel>
+              </Border>
             </StackPanel>
           </Border>
         </TabItem>
