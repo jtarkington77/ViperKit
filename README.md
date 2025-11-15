@@ -18,11 +18,18 @@ Branding and behavior are defined in [`PLAN.md`](./PLAN.md).
 
 ## Status
 
-> **Current milestone: M0 – Plan & Wireframe**
+> ## Current Status
 
-- Scope, UX, and data model are defined in `PLAN.md`.
-- Avalonia UI shell running (main window + tabs scaffold).
-- Core incident-response logic not implemented yet.
+- **UI Shell:** Avalonia UI with header branding, logo, and tab layout:
+  - Dashboard, Hunt, Persist, Sweep, Remediate, Cleanup, Harden, Case, Help.
+- **Hunt (M1 – early stub):**
+  - Accepts IOC input with a type selector (Auto-detect, File/Path, Hash, Domain/URL, IP, Registry).
+  - For **File / Path** IOCs:
+    - Checks whether the file exists on disk.
+    - Shows basic file metadata (size, created, modified).
+  - All hunts are recorded to a simple journal at `logs/Hunt.log` in the app directory.
+  - Other IOC types are currently echoed as “demo” and will be wired to real collectors in later milestones.
+
 
 
 

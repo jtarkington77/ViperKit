@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ViperKit.UI.ViewModels;
@@ -12,6 +13,30 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = new MainWindowViewModel();
+        PopulateSystemSnapshot();
+    }
+
+    private void PopulateSystemSnapshot()
+    {
+        try
+        {
+            string machineName   = Environment.MachineName;
+            string userName      = Environment.UserName;
+            string domain        = Environment.UserDomainName;
+            string osDescription = RuntimeInformation.OSDescription;
+            var    arch          = RuntimeInformation.OSArchitecture;
+
+            if (SystemHostNameText != null)
+                SystemHostNameText.Text = $"Host: {machineName}";
+            if (SystemUserText != null)
+                SystemUserText.Text     = $"User: {domain}\\{userName}";
+            if (SystemOsText != null)
+                SystemOsText.Text       = $"OS: {osDescription} ({arch})";
+        }
+        catch
+        {
+            // Dashboard should never blow up just because env info failed
+        }
     }
 
     private void HuntRunButton_OnClick(object? sender, RoutedEventArgs e)
@@ -29,12 +54,11 @@ public partial class MainWindow : Window
         var selectedIndex = HuntIocType?.SelectedIndex ?? 0;
         var effectiveType = DetermineIocType(iocText, selectedIndex);
 
-        // Log the action (best effort, failures are swallowed)
+        // Log the action
         LogHuntAction(iocText, effectiveType);
 
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
         HuntStatusText.Text = $"Status: (demo) {effectiveType} hunt executed at {timestamp}.";
-
 
         switch (effectiveType)
         {
@@ -43,7 +67,6 @@ public partial class MainWindow : Window
                 break;
 
             default:
-                // For now, everything else is just echoed back
                 HuntResultsText.Text =
                     $"(demo only) Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
                     "File/Path checks are live; other IOC types will be wired to real collectors later.";
@@ -53,7 +76,7 @@ public partial class MainWindow : Window
 
     private static string DetermineIocType(string ioc, int selectedIndex)
     {
-        // If user picked a specific type, respect it.
+        // Respect explicit selection
         switch (selectedIndex)
         {
             case 1: return "FilePath";
@@ -64,20 +87,20 @@ public partial class MainWindow : Window
         }
 
         // Auto-detect (index 0)
-        var lowered = ioc.ToLowerInvariant();
+        string lowered = ioc.ToLowerInvariant();
 
-        // Looks like a Windows path (C:\ or \\server\share)
+        // Windows path (C:\ or \\server\share)
         if (ioc.Contains(@":\") || lowered.StartsWith(@"\\"))
             return "FilePath";
 
-        // Super rough hash guess (32–64 hex chars, no spaces)
-        var noSpaces = ioc.Replace(" ", string.Empty);
-        if (noSpaces.Length is >= 32 and <= 64 && IsHexString(noSpaces))
+        // Hash-ish: 32–64 hex chars, no spaces
+        string noSpaces = ioc.Replace(" ", string.Empty);
+        if (noSpaces.Length >= 32 && noSpaces.Length <= 64 && IsHexString(noSpaces))
             return "Hash";
 
-        // Very rough IP: has 3 dots and only digits + dots
+        // Very rough IP: 3 dots, only digits + dots
         int dotCount = 0;
-        foreach (var c in ioc)
+        foreach (char c in ioc)
         {
             if (c == '.')
                 dotCount++;
@@ -85,20 +108,21 @@ public partial class MainWindow : Window
         if (dotCount == 3 && IsIpLike(ioc))
             return "IpAddress";
 
-        // Registry-ish
+        // Registry-style
         if (lowered.StartsWith("hklm\\") || lowered.StartsWith("hkcu\\"))
             return "Registry";
 
-        // Fallback – treat as domain/URL-ish
+        // Fallback
         return "DomainOrUrl";
     }
 
     private static bool IsHexString(string value)
     {
-        foreach (var c in value)
+        foreach (char c in value)
         {
-            var isDigit = c is >= '0' and <= '9';
-            var isHexLetter = c is >= 'a' and <= 'f' || c is >= 'A' && c <= 'F';
+            bool isDigit     = c >= '0' && c <= '9';
+            bool isHexLetter = (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+
             if (!isDigit && !isHexLetter)
                 return false;
         }
@@ -107,7 +131,7 @@ public partial class MainWindow : Window
 
     private static bool IsIpLike(string value)
     {
-        foreach (var c in value)
+        foreach (char c in value)
         {
             if (c != '.' && (c < '0' || c > '9'))
                 return false;
@@ -145,24 +169,22 @@ public partial class MainWindow : Window
         }
     }
 
-        private void LogHuntAction(string ioc, string type)
+    private void LogHuntAction(string ioc, string type)
     {
         try
         {
-            // Where the app is running from (e.g., bin\Debug\net9.0)
-            var baseDir = AppContext.BaseDirectory;
-            var logDir  = Path.Combine(baseDir, "logs");
+            string baseDir = AppContext.BaseDirectory;
+            string logDir  = Path.Combine(baseDir, "logs");
             Directory.CreateDirectory(logDir);
 
-            var logPath = Path.Combine(logDir, "Hunt.log");
-            var line    = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\t{type}\t{ioc}";
+            string logPath = Path.Combine(logDir, "Hunt.log");
+            string line    = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\t{type}\t{ioc}";
 
             File.AppendAllLines(logPath, new[] { line });
         }
         catch
         {
-            // Logging must never break the UI, so swallow any error
+            // Logging should never break the UI
         }
     }
-
 }
