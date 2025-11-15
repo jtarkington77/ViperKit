@@ -150,21 +150,92 @@
 
         <!-- HUNT -->
         <TabItem Header="Hunt">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Hunt tab shell — IOC in → findings out."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
-          </Border>
-        </TabItem>
+          <Border Background="#050E10" Padding="20">
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
 
-        <!-- PERSIST -->
-        <TabItem Header="Persist">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Persist tab shell — deep persistence map."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
+              <!-- TITLE + DESCRIPTION -->
+              <StackPanel Orientation="Vertical">
+                <TextBlock Text="IOC Hunt"
+                          FontSize="20"
+                          FontWeight="SemiBold"
+                          Foreground="#EAF7F7" />
+                <TextBlock Text="Paste a hash, path, domain, IP, or registry key. ViperKit will fan out across filesystem, registry, tasks, services, and WMI (once wired)."
+                          FontSize="13"
+                          Foreground="#8FA9AA"
+                          Margin="0,4,0,0"
+                          TextWrapping="Wrap" />
+              </StackPanel>
+
+              <!-- INPUT ROW -->
+              <Grid Grid.Row="1"
+                    ColumnDefinitions="*,Auto"
+                    RowDefinitions="Auto,Auto"
+                    RowSpacing="6"
+                    ColumnSpacing="8">
+
+                <!-- IOC TEXTBOX -->
+                <StackPanel Grid.Row="0" Grid.Column="0">
+                  <TextBlock Text="Indicator of Compromise"
+                            FontSize="13"
+                            Foreground="#C7D4D4" />
+                  <TextBox x:Name="HuntIocInput"
+                          Margin="0,4,0,0"
+                          FontSize="13"
+                          Watermark="e.g. file hash, C:\path\to\file.exe, bad-domain.com, 1.2.3.4, HKCU\Software\..."
+                          />
+                </StackPanel>
+
+                <!-- TYPE SELECT + BUTTON -->
+                <StackPanel Grid.Row="0"
+                            Grid.Column="1"
+                            Orientation="Vertical"
+                            HorizontalAlignment="Right"
+                            Spacing="4">
+                  <ComboBox x:Name="HuntIocType"
+                            Width="160"
+                            SelectedIndex="0">
+                    <ComboBoxItem Content="Auto-detect" />
+                    <ComboBoxItem Content="File / Path" />
+                    <ComboBoxItem Content="Hash" />
+                    <ComboBoxItem Content="Domain / URL" />
+                    <ComboBoxItem Content="IP Address" />
+                    <ComboBoxItem Content="Registry" />
+                  </ComboBox>
+                  <Button x:Name="HuntRunButton"
+                          Content="Run Hunt"
+                          Width="160" />
+                </StackPanel>
+
+                <!-- STATUS TEXT (PLACEHOLDER) -->
+                <TextBlock Grid.Row="1"
+                          Grid.Column="0"
+                          Grid.ColumnSpan="2"
+                          Text="Status: idle – no hunt executed yet."
+                          FontSize="12"
+                          Foreground="#8FA9AA"
+                          Margin="0,4,0,0" />
+              </Grid>
+
+              <!-- RESULTS AREA (NO DATAGRID YET) -->
+              <Border Grid.Row="2"
+                      Background="#0B1518"
+                      CornerRadius="6"
+                      Padding="10"
+                      BorderBrush="#1A3C3F"
+                      BorderThickness="1">
+                <StackPanel Orientation="Vertical" Spacing="4">
+                  <TextBlock Text="Results"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="#EAF7F7" />
+                  <TextBlock Text="No results yet. Once IOC hunting is wired, matches will be listed here."
+                            FontSize="13"
+                            Foreground="#C7D4D4"
+                            TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+            </Grid>
           </Border>
         </TabItem>
 
