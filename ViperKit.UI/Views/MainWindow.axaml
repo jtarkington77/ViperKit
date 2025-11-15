@@ -203,11 +203,13 @@
                   </ComboBox>
                   <Button x:Name="HuntRunButton"
                           Content="Run Hunt"
-                          Width="160" />
+                          Width="160"
+                          Click="HuntRunButton_OnClick" />
                 </StackPanel>
 
                 <!-- STATUS TEXT (PLACEHOLDER) -->
-                <TextBlock Grid.Row="1"
+                <TextBlock x:Name="HuntStatusText"
+                          Grid.Row="1"
                           Grid.Column="0"
                           Grid.ColumnSpan="2"
                           Text="Status: idle – no hunt executed yet."
@@ -228,7 +230,8 @@
                             FontSize="14"
                             FontWeight="SemiBold"
                             Foreground="#EAF7F7" />
-                  <TextBlock Text="No results yet. Once IOC hunting is wired, matches will be listed here."
+                  <TextBlock x:Name="HuntResultsText"
+                            Text="No results yet. Once IOC hunting is wired, matches will be listed here."
                             FontSize="13"
                             Foreground="#C7D4D4"
                             TextWrapping="Wrap" />
@@ -238,6 +241,7 @@
             </Grid>
           </Border>
         </TabItem>
+
 
         <!-- SWEEP -->
         <TabItem Header="Sweep">
