@@ -55,7 +55,8 @@ ViperKit helps an operator:
 **Phase 1 (current project):**
 
 - Windows portable app.
-- Tech stack: PowerShell + WPF (packaged later as a single EXE via `ps2exe` or equivalent).
+- Tech stack: .NET 8 + Avalonia UI.
+- Packaging: Single self-contained EXE later via `dotnet publish`
 - Runs locally, elevated, from a single folder.
 
 **Phase 2 (future, separate track):**

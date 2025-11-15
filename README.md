@@ -21,8 +21,10 @@ Branding and behavior are defined in [`PLAN.md`](./PLAN.md).
 > **Current milestone: M0 – Plan & Wireframe**
 
 - Scope, UX, and data model are defined in `PLAN.md`.
-- No production code yet – only planning and branding assets.
-- Next milestone: **M1 – Hunt tab MVP**.
+- Avalonia UI shell running (main window + tabs scaffold).
+- Core incident-response logic not implemented yet.
+
+
 
 ---
 

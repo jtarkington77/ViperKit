@@ -1,0 +1,144 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ViperKit.UI.Views.MainWindow"
+        Width="1200"
+        Height="750"
+        Title="ViperKit"
+        Background="#05090A">
+
+  <Grid RowDefinitions="96,*">
+
+    <!-- HEADER BAR -->
+    <Border Grid.Row="0"
+            Background="#070D0F"
+            Padding="16,10"
+            BorderBrush="#10191C"
+            BorderThickness="0,0,0,2">
+      <Grid ColumnDefinitions="Auto,*">
+
+        <!-- LOGO -->
+        <Image Grid.Column="0"
+               Width="80"
+               Height="80"
+               Margin="0,0,16,0"
+               Stretch="Uniform"
+               Source="avares://ViperKit.UI/Assets/logo.png" />
+
+        <!-- TITLE TEXT -->
+        <StackPanel Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Orientation="Vertical">
+          <TextBlock Text="ViperKit"
+                     FontSize="32"
+                     FontWeight="Bold"
+                     Foreground="#00FFF8" />
+          <TextBlock Text="Incident Response Toolkit"
+                     FontSize="14"
+                     Foreground="#8FA9AA" />
+        </StackPanel>
+
+      </Grid>
+    </Border>
+
+    <!-- MAIN BODY -->
+    <Border Grid.Row="1"
+            Background="#05090A"
+            Padding="12,8,12,12">
+
+      <!-- SIMPLE TABS – Avalonia defaults -->
+      <TabControl TabStripPlacement="Top">
+
+        <!-- DASHBOARD -->
+        <TabItem Header="Dashboard">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Dashboard – shell only for now. If you can see this, the Avalonia UI is wired up."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- HUNT -->
+        <TabItem Header="Hunt">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Hunt tab shell — IOC in → findings out."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- PERSIST -->
+        <TabItem Header="Persist">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Persist tab shell — deep persistence map."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- SWEEP -->
+        <TabItem Header="Sweep">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Sweep tab shell — recent change radar."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- REMEDIATE -->
+        <TabItem Header="Remediate">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Remediate tab shell — preview → apply → undo playbooks."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- CLEANUP -->
+        <TabItem Header="Cleanup">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Cleanup tab shell — post-removal hygiene."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- HARDEN -->
+        <TabItem Header="Harden">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Harden tab shell — Standard / Strict profiles with rollback."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- CASE -->
+        <TabItem Header="Case">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Case tab shell — evidence cart and reporting."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+        <!-- HELP -->
+        <TabItem Header="Help">
+          <Border Background="#0B1518" Padding="16">
+            <TextBlock Text="Help tab shell — safety rules, shortcuts, and log locations."
+                       Foreground="#C7D4D4"
+                       FontSize="16"
+                       TextWrapping="Wrap" />
+          </Border>
+        </TabItem>
+
+      </TabControl>
+    </Border>
+  </Grid>
+</Window>
