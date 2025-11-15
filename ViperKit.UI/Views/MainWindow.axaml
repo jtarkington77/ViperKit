@@ -6,7 +6,7 @@
         Title="ViperKit"
         Background="#05090A">
 
-  <Grid RowDefinitions="96,*">
+  <Grid RowDefinitions="110,*">
 
     <!-- HEADER BAR -->
     <Border Grid.Row="0"
@@ -18,8 +18,8 @@
 
         <!-- LOGO -->
         <Image Grid.Column="0"
-               Width="80"
-               Height="80"
+               Width="96"
+               Height="96"
                Margin="0,0,16,0"
                Stretch="Uniform"
                Source="avares://ViperKit.UI/Assets/logo.png" />
@@ -50,13 +50,103 @@
 
         <!-- DASHBOARD -->
         <TabItem Header="Dashboard">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Dashboard – shell only for now. If you can see this, the Avalonia UI is wired up."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
+          <Border Background="#050E10" Padding="20">
+            <Grid RowDefinitions="Auto, *" RowSpacing="16">
+              <!-- TOP: TITLE + SUBTITLE -->
+              <StackPanel Orientation="Vertical">
+                <TextBlock Text="ViperKit Dashboard"
+                          FontSize="22"
+                          FontWeight="SemiBold"
+                          Foreground="#EAF7F7" />
+                <TextBlock Text="High-level view of the endpoint you’re working on and quick entry points into Hunt, Persist, and Sweep."
+                          FontSize="13"
+                          Foreground="#8FA9AA"
+                          Margin="0,4,0,0"
+                          TextWrapping="Wrap" />
+              </StackPanel>
+
+              <!-- BOTTOM: CARDS -->
+              <Grid Grid.Row="1"
+                    ColumnDefinitions="*,*,*"
+                    ColumnSpacing="16">
+
+                <!-- CARD 1: SESSION INFO -->
+                <Border Background="#0B1518"
+                        CornerRadius="6"
+                        Padding="12"
+                        BorderBrush="#1A3C3F"
+                        BorderThickness="1">
+                  <StackPanel Orientation="Vertical" Spacing="4">
+                    <TextBlock Text="Current Session"
+                              FontSize="14"
+                              FontWeight="SemiBold"
+                              Foreground="#00FFF8" />
+                    <TextBlock Text="Hostname: (placeholder)"
+                              FontSize="13"
+                              Foreground="#C7D4D4" />
+                    <TextBlock Text="User: (placeholder)"
+                              FontSize="13"
+                              Foreground="#C7D4D4" />
+                    <TextBlock Text="Elevation: (placeholder)"
+                              FontSize="13"
+                              Foreground="#C7D4D4" />
+                  </StackPanel>
+                </Border>
+
+                <!-- CARD 2: QUICK ACTIONS -->
+                <Border Grid.Column="1"
+                        Background="#0B1518"
+                        CornerRadius="6"
+                        Padding="12"
+                        BorderBrush="#1A3C3F"
+                        BorderThickness="1">
+                  <StackPanel Orientation="Vertical" Spacing="6">
+                    <TextBlock Text="Quick Actions"
+                              FontSize="14"
+                              FontWeight="SemiBold"
+                              Foreground="#00FFF8" />
+                    <Button Content="Start IOC Hunt"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,4,0,0" />
+                    <Button Content="Map Persistence"
+                            HorizontalAlignment="Stretch" />
+                    <Button Content="Run Recent Changes Sweep"
+                            HorizontalAlignment="Stretch" />
+                  </StackPanel>
+                </Border>
+
+                <!-- CARD 3: SAFETY / NOTES -->
+                <Border Grid.Column="2"
+                        Background="#0B1518"
+                        CornerRadius="6"
+                        Padding="12"
+                        BorderBrush="#1A3C3F"
+                        BorderThickness="1">
+                  <StackPanel Orientation="Vertical" Spacing="4">
+                    <TextBlock Text="Safety Rules"
+                              FontSize="14"
+                              FontWeight="SemiBold"
+                              Foreground="#00FFF8" />
+                    <TextBlock Text="• Preview changes before applying"
+                              FontSize="13"
+                              Foreground="#C7D4D4"
+                              TextWrapping="Wrap" />
+                    <TextBlock Text="• Export artifacts before deleting"
+                              FontSize="13"
+                              Foreground="#C7D4D4"
+                              TextWrapping="Wrap" />
+                    <TextBlock Text="• Use Evidence Cart instead of ad-hoc notes"
+                              FontSize="13"
+                              Foreground="#C7D4D4"
+                              TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+
+              </Grid>
+            </Grid>
           </Border>
         </TabItem>
+
 
         <!-- HUNT -->
         <TabItem Header="Hunt">
