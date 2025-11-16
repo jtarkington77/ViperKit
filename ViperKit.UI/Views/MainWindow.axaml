@@ -251,25 +251,92 @@
                   </Border>
                 </TabItem>
 
-        <!-- SWEEP -->
-        <TabItem Header="Sweep">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Sweep tab shell — recent change radar."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
-          </Border>
-        </TabItem>
+                <!-- SWEEP -->
+                <TabItem Header="Sweep">
+                  <Border Background="#0B1518" Padding="16">
+                    <StackPanel Spacing="12">
 
-        <!-- REMEDIATE -->
-        <TabItem Header="Remediate">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Remediate tab shell — preview → apply → undo playbooks."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
-          </Border>
-        </TabItem>
+                      <TextBlock Text="Sweep – recent change radar"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                Foreground="#EAF7F7" />
+
+                      <TextBlock Text="Scan high-signal folders (Desktop, Downloads, Temp, AppData, Startup) for recently created or modified executables, scripts, and archives."
+                                FontSize="13"
+                                Foreground="#C7D4D4"
+                                TextWrapping="Wrap" />
+
+                      <!-- Lookback + Run -->
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="8">
+                        <TextBlock Text="Look back:"
+                                  VerticalAlignment="Center"
+                                  Foreground="#C4D4D4" />
+                        <ComboBox x:Name="SweepLookbackCombo"
+                                  Width="150">
+                          <ComboBoxItem Content="24 hours" />
+                          <ComboBoxItem Content="3 days"   />
+                          <ComboBoxItem Content="7 days"   />
+                          <ComboBoxItem Content="30 days"  />
+                        </ComboBox>
+
+                        <Button x:Name="SweepRunButton"
+                                Content="Run Sweep"
+                                Width="120"
+                                Click="SweepRunButton_OnClick" />
+                      </StackPanel>
+
+                      <!-- Status -->
+                      <TextBlock x:Name="SweepStatusText"
+                                Text="Status: idle."
+                                FontSize="12"
+                                Foreground="#8FA9AA"
+                                Margin="0,4,0,0" />
+
+                      <!-- Actions -->
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="8"
+                                  Margin="0,4,0,0">
+                        <Button x:Name="SweepCopyResultsButton"
+                                Content="Copy Results"
+                                Width="120"
+                                Click="SweepCopyResultsButton_OnClick" />
+                        <Button x:Name="SweepSaveResultsButton"
+                                Content="Save Snapshot"
+                                Width="130"
+                                Click="SweepSaveResultsButton_OnClick" />
+                        <CheckBox x:Name="SweepShowOnlyFlaggedCheckBox"
+                                  Content="Show only flagged items"
+                                  Foreground="#FF6B6B"
+                                  Checked="SweepFilterCheckBox_OnChanged"
+                                  Unchecked="SweepFilterCheckBox_OnChanged" />
+                      </StackPanel>
+
+                      <!-- Results -->
+                      <Border Background="#050E10"
+                              Padding="8"
+                              CornerRadius="4"
+                              BorderBrush="#1A3C3F"
+                              BorderThickness="1"
+                              Margin="0,8,0,0">
+                        <StackPanel>
+                          <TextBlock Text="Results"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="#EAF7F7"
+                                    Margin="0,0,0,6" />
+
+                          <ListBox x:Name="SweepResultsList"
+                                  Height="660"
+                                  Background="#050E10"
+                                  BorderThickness="0"
+                                  Foreground="#C7D4D4" />
+                        </StackPanel>
+                      </Border>
+
+                    </StackPanel>
+                  </Border>
+                </TabItem>
 
         <!-- CLEANUP -->
         <TabItem Header="Cleanup">
