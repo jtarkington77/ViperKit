@@ -183,57 +183,73 @@
                   </Border>
                 </TabItem>
 
-        <!-- PERSIST -->
-        <TabItem Header="Persist">
-          <Border Background="#0B1518" Padding="16">
-            <StackPanel Spacing="12">
+                <!-- PERSIST -->
+                <TabItem Header="Persist">
+                  <Border Background="#0B1518" Padding="16">
+                    <StackPanel Spacing="12">
 
-              <TextBlock Text="Persistence Map"
-                        FontSize="20"
-                        FontWeight="SemiBold"
-                        Foreground="#EAF7F7" />
+                      <TextBlock Text="Persistence Map"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                Foreground="#EAF7F7" />
 
-              <TextBlock Text="Enumerate basic autorun locations (HKCU/HKLM Run and RunOnce)."
-                        FontSize="13"
-                        Foreground="#C7D4D4"
-                        TextWrapping="Wrap" />
+                      <TextBlock Text="Map common persistence: Run / RunOnce autoruns, Startup folders, and automatic services. Entries with RISK: CHECK are worth a closer look."
+                                FontSize="13"
+                                Foreground="#C7D4D4"
+                                TextWrapping="Wrap" />
 
-              <Button x:Name="PersistRunButton"
-                      Content="Enumerate Autoruns (HKCU/HKLM Run*)"
-                      Width="260"
-                      HorizontalAlignment="Left"
-                      Click="PersistRunButton_OnClick" />
+                      <Button x:Name="PersistRunButton"
+                              Content="Enumerate Persistence"
+                              Width="170"
+                              HorizontalAlignment="Left"
+                              Click="PersistRunButton_OnClick" />
 
-              <TextBlock x:Name="PersistStatusText"
-                        Text="Status: idle."
-                        FontSize="12"
-                        Foreground="#8FA9AA"
-                        Margin="0,4,0,0" />
+                      <TextBlock x:Name="PersistStatusText"
+                                Text="Status: idle."
+                                FontSize="12"
+                                Foreground="#8FA9AA"
+                                Margin="0,4,0,0" />
 
-              <Border Background="#050E10"
-                      Padding="8"
-                      CornerRadius="4"
-                      BorderBrush="#1A3C3F"
-                      BorderThickness="1"
-                      Margin="0,8,0,0">
+                      <!-- Controls for triage -->
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="12"
+                                  Margin="0,4,0,0">
+                        <CheckBox x:Name="PersistShowCheckOnlyCheckBox"
+                                  Content="Show only 'CHECK' entries"
+                                  Foreground="#FF6B6B"
+                                  Checked="PersistFilterCheckBox_OnChanged"
+                                  Unchecked="PersistFilterCheckBox_OnChanged" />
+                        <Button x:Name="PersistOpenSelectedButton"
+                                Content="Investigate selected ..."
+                                Width="190"
+                                Click="PersistOpenSelectedButton_OnClick" />
+                      </StackPanel>
 
-                <StackPanel>
-                  <TextBlock Text="Results"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="#EAF7F7"
-                            Margin="0,0,0,6" />
+                      <Border Background="#050E10"
+                              Padding="8"
+                              CornerRadius="4"
+                              BorderBrush="#1A3C3F"
+                              BorderThickness="1"
+                              Margin="0,8,0,0">
 
-                  <ListBox x:Name="PersistResultsList"
-                          Height="260"
-                          Background="#050E10"
-                          BorderThickness="0"
-                          Foreground="#C7D4D4" />
-                </StackPanel>
-              </Border>
-            </StackPanel>
-          </Border>
-        </TabItem>
+                        <StackPanel>
+                          <TextBlock Text="Results"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="#EAF7F7"
+                                    Margin="0,0,0,6" />
+
+                          <ListBox x:Name="PersistResultsList"
+                                  Height="660"
+                                  Background="#050E10"
+                                  BorderThickness="0"
+                                  Foreground="#C7D4D4"
+                                  DoubleTapped="PersistResultsList_OnDoubleTapped" />
+                        </StackPanel>
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                </TabItem>
 
         <!-- SWEEP -->
         <TabItem Header="Sweep">

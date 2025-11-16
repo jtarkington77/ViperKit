@@ -9,6 +9,8 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
 using System.Net.Http;
+using ViperKit.UI;
+
 
 
 namespace ViperKit.UI.Views;
@@ -19,7 +21,7 @@ public partial class MainWindow
     {
         Timeout = TimeSpan.FromSeconds(3)
     };
-    
+
     // =========================
     // HUNT TAB
     // =========================
@@ -211,7 +213,7 @@ public partial class MainWindow
                 }
                 catch (Exception ex)
                 {
-                    // If hashing fails, we still show file metadata
+                    // If hashing fails, still show file metadata
                     md5Hex    = $"(error computing hash: {ex.Message})";
                     sha256Hex = "(not computed)";
                 }
@@ -361,7 +363,6 @@ public partial class MainWindow
         sb.AppendLine();
         sb.AppendLine("HTTP probe (best effort):");
 
-        // Build something we can actually request
         string urlToCheck = original.Trim();
 
         if (!urlToCheck.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
@@ -709,7 +710,7 @@ public partial class MainWindow
                 Title = "Select scope folder for hash / file hunts"
             };
 
-            // MainWindow *is* a Window, so we can use it directly
+            // MainWindow *is* a Window
             string? path = await dialog.ShowAsync(this);
 
             if (!string.IsNullOrWhiteSpace(path))
@@ -740,7 +741,25 @@ public partial class MainWindow
         }
         catch
         {
-            // Logging should never break the UI
+            // Text log failure shouldn't break anything
+        }
+
+        // JSON log (hunt.jsonl)
+        try
+        {
+            JsonLog.Append("hunt", new
+            {
+                Timestamp   = DateTime.Now,
+                Host        = Environment.MachineName,
+                User        = Environment.UserName,
+                Type        = type,
+                Ioc         = ioc,
+                ScopeFolder = HuntScopeFolderInput?.Text
+            });
+        }
+        catch
+        {
+            // Extra safety; JsonLog already swallows errors
         }
     }
 }
