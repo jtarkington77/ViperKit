@@ -28,7 +28,7 @@ public partial class MainWindow
         TimeSpan window = GetSweepLookbackWindow();
         DateTime cutoff = now - window;
 
-        // File types worth caring about on a first pass
+        // File types worth caring about on a first pass 
         var interestingExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".exe", ".dll", ".com",
@@ -38,35 +38,29 @@ public partial class MainWindow
             ".zip", ".7z", ".rar", ".iso"
         };
 
-        // High-signal roots
-        var roots = new List<(string Label, string? Path)>
-        {
-            ("Desktop (current user)",   Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
-            ("Downloads (current user)", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? "", "Downloads")),
-            ("Temp (user)",              Path.GetTempPath()),
-            ("AppData\\Roaming",         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)),
-            ("AppData\\Local",           Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)),
-            ("Startup (current user)",   Environment.GetFolderPath(Environment.SpecialFolder.Startup)),
-            ("Startup (all users)",      Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup)),
-        };
+        // Build sweep roots across ALL user profiles + common paths
+        var roots = BuildSweepRoots();
 
         foreach (var (label, path) in roots)
         {
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-                continue;
-
+            // BuildSweepRoots already checks Directory.Exists, so just call
             ScanSweepRoot(label, path, cutoff, now, interestingExts);
         }
+
+        // deep services + drivers
+        RunSweepServicesAndDrivers();
 
         BindSweepResults();
 
         int total   = _sweepEntries.Count;
         int flagged = _sweepEntries.Count(s =>
-            s.Contains(">>> FLAG: CHECK", StringComparison.OrdinalIgnoreCase));
+            s.Contains("Severity: HIGH", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("Severity: MEDIUM", StringComparison.OrdinalIgnoreCase));
 
         if (SweepStatusText != null)
             SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} flagged.";
     }
+
 
     private TimeSpan GetSweepLookbackWindow()
     {
@@ -82,6 +76,82 @@ public partial class MainWindow
         };
     }
 
+    private List<(string Label, string Path)> BuildSweepRoots()
+    {
+        var roots = new List<(string Label, string Path)>();
+
+        try
+        {
+            // Work out C:\Users from the current profile
+            string currentProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string usersRoot      = Path.GetDirectoryName(currentProfile) ?? currentProfile;
+
+            if (Directory.Exists(usersRoot))
+            {
+                foreach (var userDir in Directory.EnumerateDirectories(usersRoot))
+                {
+                    string userName = Path.GetFileName(userDir);
+                    if (string.IsNullOrWhiteSpace(userName))
+                        continue;
+
+                    string lower = userName.ToLowerInvariant();
+
+                    // Skip obvious system / template profiles
+                    if (lower is "default" or "default user" or "public" or "all users")
+                        continue;
+
+                    // Desktop
+                    string desktop = Path.Combine(userDir, "Desktop");
+                    if (Directory.Exists(desktop))
+                        roots.Add(($"Desktop ({userName})", desktop));
+
+                    // Downloads
+                    string downloads = Path.Combine(userDir, "Downloads");
+                    if (Directory.Exists(downloads))
+                        roots.Add(($"Downloads ({userName})", downloads));
+
+                    // AppData\Roaming
+                    string appRoaming = Path.Combine(userDir, "AppData", "Roaming");
+                    if (Directory.Exists(appRoaming))
+                        roots.Add(($"AppData\\Roaming ({userName})", appRoaming));
+
+                    // AppData\Local
+                    string appLocal = Path.Combine(userDir, "AppData", "Local");
+                    if (Directory.Exists(appLocal))
+                        roots.Add(($"AppData\\Local ({userName})", appLocal));
+
+                    // AppData\Local\Temp
+                    string tempLocal = Path.Combine(userDir, "AppData", "Local", "Temp");
+                    if (Directory.Exists(tempLocal))
+                        roots.Add(($"Temp ({userName})", tempLocal));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _sweepEntries.Add($"[Sweep] ERROR building user roots: {ex.Message}");
+        }
+
+        // Global-ish roots
+        AddRootIfExists(roots, "ProgramData",
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
+
+        AddRootIfExists(roots, "Startup (current user)",
+            Environment.GetFolderPath(Environment.SpecialFolder.Startup));
+
+        AddRootIfExists(roots, "Startup (all users)",
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup));
+
+        return roots;
+    }
+
+    private static void AddRootIfExists(List<(string Label, string Path)> roots, string label, string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            roots.Add((label, path));
+    }
+
+
     private void ScanSweepRoot(
         string label,
         string rootPath,
@@ -93,48 +163,91 @@ public partial class MainWindow
         {
             foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
             {
-                FileInfo info;
-                try
-                {
-                    info = new FileInfo(file);
-                }
-                catch
-                {
-                    continue;
-                }
+                DateTime created  = File.GetCreationTime(file);
+                DateTime modified = File.GetLastWriteTime(file);
 
-                if (!interestingExts.Contains(info.Extension))
-                    continue;
-
-                DateTime created  = info.CreationTime;
-                DateTime modified = info.LastWriteTime;
-
-                // Only keep things that are "recent" by either creation or modification
+                // Respect the lookback window
                 if (created < cutoff && modified < cutoff)
                     continue;
 
+                string ext = Path.GetExtension(file);
+                if (!interestingExts.Contains(ext))
+                    continue;
+
+                TimeSpan age     = now - modified;
+                string lowerPath = file.ToLowerInvariant();
+
+                bool inDesktop   = lowerPath.Contains(@"\desktop\");
+                bool inDownloads = lowerPath.Contains(@"\downloads\");
+                bool inStartup   = lowerPath.Contains(@"\startup\");
+                bool inAppData   = lowerPath.Contains(@"\appdata\");
+                bool inTemp      = lowerPath.Contains(@"\temp\");
+
+                bool hotLocation  = inDesktop || inDownloads || inStartup;
+                bool warmLocation = inAppData || inTemp;
+
+                bool isScript = ext is ".ps1" or ".js" or ".jse" or ".vbs" or ".bat" or ".cmd";
+                bool isExe    = ext is ".exe" or ".com";
+                bool isDriver = ext is ".sys";
+                bool isDll    = ext is ".dll";
+
+                var reasons = new List<string>();
+
+                if (hotLocation || warmLocation)
+                    reasons.Add("user-writable location");
+
+                if (isExe)
+                    reasons.Add("executable file");
+                else if (isDriver)
+                    reasons.Add("driver file");
+                else if (isScript)
+                    reasons.Add("script file");
+                else if (isDll)
+                    reasons.Add("DLL file");
+
+                if (age.TotalHours <= 24)
+                    reasons.Add("modified within last 24h");
+
+                // ----------------- SEVERITY RULES -----------------
+                string severity = "LOW";
+
+                // HIGH: EXE / script / driver in Desktop / Downloads / Startup
+                if (hotLocation && (isExe || isDriver || isScript))
+                {
+                    severity = "HIGH";
+                }
+                // HIGH: VERY recent EXE/script/driver in AppData/Temp (4h window)
+                else if (warmLocation && (isExe || isDriver || isScript) && age.TotalHours <= 4)
+                {
+                    severity = "HIGH";
+                }
+                // MEDIUM: older EXE/script/driver in AppData/Temp, or DLLs there
+                else if (warmLocation && (isExe || isDriver || isScript || isDll))
+                {
+                    severity = "MEDIUM";
+                }
+                // Everything else stays LOW – still logged, just not “flagged”.
+
+                bool isFlagged = severity is "HIGH" or "MEDIUM";
+
                 var sb = new StringBuilder();
                 sb.AppendLine($"[Sweep] {label}");
-                sb.AppendLine($"  Path:     {info.FullName}");
-                sb.AppendLine($"  Type:     {info.Extension}");
+                sb.AppendLine($"  Path:     {file}");
+                sb.AppendLine($"  Type:     {ext}");
                 sb.AppendLine($"  Created:  {created}");
                 sb.AppendLine($"  Modified: {modified}");
+                sb.AppendLine($"  Age:      {age}");
+                sb.AppendLine($"  Severity: {severity}");
 
-                TimeSpan age = now - modified;
-                sb.AppendLine($"  Age:      {age:g} ago");
-
-                string flag = BuildSweepFlagLabel(info.FullName);
-                if (flag.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
-                    sb.AppendLine($"  >>> FLAG: {flag} <<<");
-                else
-                    sb.AppendLine($"  Flag:     {flag}");
+                if (reasons.Count > 0)
+                    sb.AppendLine($">>> Reasons: {string.Join(", ", reasons)} <<<");
 
                 _sweepEntries.Add(sb.ToString());
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // If one root blows up (permissions, etc), don't kill the whole sweep.
+            _sweepEntries.Add($"[Sweep] ERROR in root '{label}': {ex.Message}");
         }
     }
 
@@ -203,7 +316,8 @@ public partial class MainWindow
         if (SweepShowOnlyFlaggedCheckBox?.IsChecked == true)
         {
             source = source.Where(s =>
-                s.Contains(">>> FLAG: CHECK", StringComparison.OrdinalIgnoreCase));
+                s.Contains("Severity: HIGH", StringComparison.OrdinalIgnoreCase) ||
+                s.Contains("Severity: MEDIUM", StringComparison.OrdinalIgnoreCase));
         }
 
         SweepResultsList.ItemsSource = source.ToList();
