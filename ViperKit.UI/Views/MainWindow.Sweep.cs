@@ -5,13 +5,14 @@ using System.Linq;
 using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using ViperKit.UI.Models;
 
 namespace ViperKit.UI.Views;
 
 public partial class MainWindow
 {
     // Cache of last sweep so we can filter without rescanning
-    private readonly List<string> _sweepEntries = new();
+    private readonly List<SweepEntry> _sweepEntries = new();
 
     // =========================
     // SWEEP TAB – RECENT CHANGE RADAR
@@ -43,24 +44,49 @@ public partial class MainWindow
 
         foreach (var (label, path) in roots)
         {
-            // BuildSweepRoots already checks Directory.Exists, so just call
             ScanSweepRoot(label, path, cutoff, now, interestingExts);
         }
 
-        // deep services + drivers
+        // Deep services + drivers (other partial uses _sweepEntries too)
         RunSweepServicesAndDrivers();
 
         BindSweepResults();
 
-        int total   = _sweepEntries.Count;
-        int flagged = _sweepEntries.Count(s =>
-            s.Contains("Severity: HIGH", StringComparison.OrdinalIgnoreCase) ||
-            s.Contains("Severity: MEDIUM", StringComparison.OrdinalIgnoreCase));
+        int total = _sweepEntries.Count;
+        int flagged = _sweepEntries.Count(entry =>
+            entry.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase) ||
+            entry.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
 
         if (SweepStatusText != null)
-            SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} flagged.";
-    }
+            SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} MED/HIGH.";
+        
+        // Log into the case timeline
+        try
+        {
+            CaseManager.AddEvent(
+                tab: "Sweep",
+                action: "Sweep scan completed",
+                severity: flagged > 0 ? "WARN" : "INFO",
+                target: $"Items: {total}",
+                details: flagged > 0
+                    ? $"Flagged entries (MED/HIGH): {flagged}"
+                    : "No MED/HIGH entries found in sweep.");
+        }
+        catch
+        {
+        }
 
+        // Update dashboard + case tab summaries
+        try
+        {
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch
+        {
+        }
+
+    }
 
     private TimeSpan GetSweepLookbackWindow()
     {
@@ -129,7 +155,13 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            _sweepEntries.Add($"[Sweep] ERROR building user roots: {ex.Message}");
+            _sweepEntries.Add(new SweepEntry
+            {
+                Category = "Error",
+                Severity = "LOW",
+                Source   = "BuildSweepRoots",
+                Reason   = ex.Message
+            });
         }
 
         // Global-ish roots
@@ -150,7 +182,6 @@ public partial class MainWindow
         if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
             roots.Add((label, path));
     }
-
 
     private void ScanSweepRoot(
         string label,
@@ -226,83 +257,33 @@ public partial class MainWindow
                 {
                     severity = "MEDIUM";
                 }
-                // Everything else stays LOW – still logged, just not “flagged”.
+                // Everything else stays LOW – still logged.
 
-                bool isFlagged = severity is "HIGH" or "MEDIUM";
+                var entry = new SweepEntry
+                {
+                    Category = "File",
+                    Severity = severity,
+                    Path     = file,
+                    Name     = Path.GetFileName(file),
+                    Source   = label,
+                    Reason   = reasons.Count > 0 ? string.Join(", ", reasons) : string.Empty,
+                    Modified = modified
+                };
 
-                var sb = new StringBuilder();
-                sb.AppendLine($"[Sweep] {label}");
-                sb.AppendLine($"  Path:     {file}");
-                sb.AppendLine($"  Type:     {ext}");
-                sb.AppendLine($"  Created:  {created}");
-                sb.AppendLine($"  Modified: {modified}");
-                sb.AppendLine($"  Age:      {age}");
-                sb.AppendLine($"  Severity: {severity}");
-
-                if (reasons.Count > 0)
-                    sb.AppendLine($">>> Reasons: {string.Join(", ", reasons)} <<<");
-
-                _sweepEntries.Add(sb.ToString());
+                _sweepEntries.Add(entry);
             }
         }
         catch (Exception ex)
         {
-            _sweepEntries.Add($"[Sweep] ERROR in root '{label}': {ex.Message}");
+            _sweepEntries.Add(new SweepEntry
+            {
+                Category = "Error",
+                Severity = "LOW",
+                Source   = label,
+                Reason   = ex.Message
+            });
         }
     }
-
-    private static string BuildSweepFlagLabel(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return "UNKNOWN";
-
-        string lower = path.ToLowerInvariant();
-        string ext   = Path.GetExtension(path).ToLowerInvariant();
-
-        // Stuff we really care about if it lands in Downloads / Temp / AppData / Startup
-        var riskyExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ".exe", ".dll", ".com",
-            ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
-            ".scr", ".sys",
-            ".msi",
-            ".zip", ".7z", ".rar", ".iso"
-        };
-
-        bool fromDownloads = lower.Contains(@"\downloads\");
-        bool fromTemp      = lower.Contains(@"\temp\");
-        bool fromAppData   = lower.Contains(@"\appdata\");
-        bool inStartup     = lower.Contains(@"\startup\");
-        bool fromDesktop   = lower.Contains(@"\desktop\");
-
-        bool isRiskyExt = riskyExts.Contains(ext);
-
-        var tags = new List<string>();
-        if (fromDownloads) tags.Add("from Downloads");
-        if (fromTemp)      tags.Add("from Temp");
-        if (fromAppData)   tags.Add("from AppData");
-        if (inStartup)     tags.Add("in Startup");
-        if (fromDesktop)   tags.Add("from Desktop");
-
-        // High-risk locations: Downloads / Temp / AppData / Startup
-        if (fromDownloads || fromTemp || fromAppData || inStartup)
-        {
-            if (isRiskyExt)
-                return "CHECK – " + string.Join(", ", tags) + ", executable/script/archive";
-
-            return "NOTE – " + string.Join(", ", tags);
-        }
-
-        // Desktop only: usually user workspace, not auto-red
-        if (fromDesktop)
-            return "OK – Desktop file (likely user workspace)";
-
-        if (tags.Count == 0)
-            return "OK – recent but standard-looking location";
-
-        return "OK – " + string.Join(", ", tags);
-    }
-
 
     // ------------ Binding & filter ------------
 
@@ -311,19 +292,62 @@ public partial class MainWindow
         if (SweepResultsList == null)
             return;
 
-        IEnumerable<string> source = _sweepEntries;
+        IEnumerable<SweepEntry> source = _sweepEntries;
 
+        // 1) "Show only flagged" => MED/HIGH only
         if (SweepShowOnlyFlaggedCheckBox?.IsChecked == true)
         {
-            source = source.Where(s =>
-                s.Contains("Severity: HIGH", StringComparison.OrdinalIgnoreCase) ||
-                s.Contains("Severity: MEDIUM", StringComparison.OrdinalIgnoreCase));
+            source = source.Where(entry =>
+                entry.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase) ||
+                entry.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
         }
 
+        // 2) Severity dropdown
+        if (SweepSeverityFilterCombo != null && SweepSeverityFilterCombo.SelectedIndex > 0)
+        {
+            string? sev = SweepSeverityFilterCombo.SelectedIndex switch
+            {
+                1 => "HIGH",
+                2 => "MEDIUM",
+                3 => "LOW",
+                _ => null
+            };
+
+            if (!string.IsNullOrEmpty(sev))
+            {
+                source = source.Where(entry =>
+                    entry.Severity.Equals(sev, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        // 3) Text search (path / name / reason / source)
+        string? term = SweepSearchTextBox?.Text;
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            term = term.Trim();
+
+            source = source.Where(entry =>
+                (!string.IsNullOrEmpty(entry.Name)   && entry.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(entry.Path)   && entry.Path.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(entry.Source) && entry.Source.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(entry.Reason) && entry.Reason.Contains(term, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // DataGrid binds directly to SweepEntry properties
         SweepResultsList.ItemsSource = source.ToList();
     }
 
     private void SweepFilterCheckBox_OnChanged(object? sender, RoutedEventArgs e)
+    {
+        BindSweepResults();
+    }
+
+    private void SweepSeverityFilterCombo_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        BindSweepResults();
+    }
+
+    private void SweepSearchTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
     {
         BindSweepResults();
     }
@@ -339,9 +363,24 @@ public partial class MainWindow
             return;
         }
 
-        string text = string.Join(
-            Environment.NewLine + Environment.NewLine,
-            _sweepEntries);
+        // Copy full details, not just the short display line
+        var sb = new StringBuilder();
+
+        foreach (var entry in _sweepEntries)
+        {
+            sb.AppendLine($"Category: {entry.Category}");
+            sb.AppendLine($"Severity: {entry.Severity}");
+            sb.AppendLine($"Source:   {entry.Source}");
+            sb.AppendLine($"Name:     {entry.Name}");
+            sb.AppendLine($"Path:     {entry.Path}");
+            if (entry.Modified.HasValue)
+                sb.AppendLine($"Modified: {entry.Modified.Value}");
+            if (!string.IsNullOrWhiteSpace(entry.Reason))
+                sb.AppendLine($"Reason:   {entry.Reason}");
+            sb.AppendLine();
+        }
+
+        string text = sb.ToString();
 
         try
         {
@@ -384,11 +423,23 @@ public partial class MainWindow
             string fileName = $"Sweep_{stamp}.txt";
             string fullPath = Path.Combine(snapshotDir, fileName);
 
-            string text = string.Join(
-                Environment.NewLine + Environment.NewLine,
-                _sweepEntries);
+            var sb = new StringBuilder();
 
-            File.WriteAllText(fullPath, text, Encoding.UTF8);
+            foreach (var entry in _sweepEntries)
+            {
+                sb.AppendLine($"Category: {entry.Category}");
+                sb.AppendLine($"Severity: {entry.Severity}");
+                sb.AppendLine($"Source:   {entry.Source}");
+                sb.AppendLine($"Name:     {entry.Name}");
+                sb.AppendLine($"Path:     {entry.Path}");
+                if (entry.Modified.HasValue)
+                    sb.AppendLine($"Modified: {entry.Modified.Value}");
+                if (!string.IsNullOrWhiteSpace(entry.Reason))
+                    sb.AppendLine($"Reason:   {entry.Reason}");
+                sb.AppendLine();
+            }
+
+            File.WriteAllText(fullPath, sb.ToString(), Encoding.UTF8);
 
             if (SweepStatusText != null)
                 SweepStatusText.Text = $"Status: sweep snapshot saved to {fileName}.";

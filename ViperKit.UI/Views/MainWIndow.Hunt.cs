@@ -9,6 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
 using System.Net.Http;
+using ViperKit.UI.Models;
 using ViperKit.UI;
 
 
@@ -74,6 +75,17 @@ public partial class MainWindow
                     $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
                     "This IOC type is not wired yet.";
                 break;
+
+            try
+        {
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch
+        {
+            // Never let UI updates crash the hunt
+        }
+
         }
     }
 
@@ -725,9 +737,10 @@ public partial class MainWindow
         }
     }
 
-    // ---- Logging ----
+    /// ---- Logging ----
     private void LogHuntAction(string ioc, string type)
     {
+        // 1) Text log (Hunt.log)
         try
         {
             string baseDir = AppContext.BaseDirectory;
@@ -744,7 +757,7 @@ public partial class MainWindow
             // Text log failure shouldn't break anything
         }
 
-        // JSON log (hunt.jsonl)
+        // 2) JSON log (hunt.jsonl)
         try
         {
             JsonLog.Append("hunt", new
@@ -760,6 +773,25 @@ public partial class MainWindow
         catch
         {
             // Extra safety; JsonLog already swallows errors
+        }
+
+        // 3) Case log (for Case tab + export)
+        try
+        {
+            string? scope = HuntScopeFolderInput?.Text;
+
+            CaseManager.AddEvent(
+                tab: "Hunt",
+                action: $"Hunt run ({type})",
+                severity: "INFO",
+                target: ioc,
+                details: string.IsNullOrWhiteSpace(scope)
+                    ? "Scope: (none)"
+                    : $"Scope: {scope}");
+        }
+        catch
+        {
+            // Case logging should never crash the UI either
         }
     }
 }

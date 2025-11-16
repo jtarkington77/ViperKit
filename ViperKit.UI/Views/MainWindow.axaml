@@ -1,10 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:ViperKit.UI.Models"
         x:Class="ViperKit.UI.Views.MainWindow"
         Width="1200"
         Height="750"
         Title="ViperKit"
         Background="#05090A">
+
 
   <Grid RowDefinitions="110,*">
 
@@ -48,55 +50,103 @@
       <!-- SIMPLE TABS – Avalonia defaults -->
       <TabControl TabStripPlacement="Top">
 
-        <!-- DASHBOARD -->
-        <TabItem Header="Dashboard">
-        <Border Background="#0B1518" Padding="16">
-          <StackPanel Orientation="Vertical" Spacing="16">
+                <!-- DASHBOARD -->
+                <TabItem Header="Dashboard">
+                  <Border Background="#0B1518" Padding="16">
+                    <StackPanel Orientation="Vertical" Spacing="16">
 
-            <!-- TITLE -->
-            <TextBlock Text="Dashboard"
-                      FontSize="20"
-                      FontWeight="SemiBold"
-                      Foreground="#EAF7F7" />
+                      <!-- TITLE -->
+                      <TextBlock Text="Dashboard"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                Foreground="#EAF7F7" />
 
-            <TextBlock Text="High-level view of this host and quick entry points into tabs."
-                      FontSize="13"
-                      Foreground="#8FA9AA"
-                      TextWrapping="Wrap" />
+                      <TextBlock Text="High-level view of this host and the current incident case."
+                                FontSize="13"
+                                Foreground="#8FA9AA"
+                                TextWrapping="Wrap" />
 
-            <!-- SYSTEM SNAPSHOT CARD -->
-            <Border Background="#050E10"
-                    Padding="12"
-                    CornerRadius="6"
-                    BorderBrush="#1A3C3F"
-                    BorderThickness="1">
-              <StackPanel Spacing="6">
-                <TextBlock Text="System Snapshot"
-                          FontSize="14"
-                          FontWeight="SemiBold"
-                          Foreground="#EAF7F7" />
-                <TextBlock x:Name="SystemHostNameText"
-                          Text="Host: (loading...)"
-                          FontSize="13"
-                          Foreground="#C7D4D4" />
-                <TextBlock x:Name="SystemUserText"
-                          Text="User: (loading...)"
-                          FontSize="13"
-                          Foreground="#C7D4D4" />
-                <TextBlock x:Name="SystemOsText"
-                          Text="OS: (loading...)"
-                          FontSize="13"
-                          Foreground="#C7D4D4" />
-              </StackPanel>
-            </Border>
+                      <!-- TWO-COLUMN LAYOUT: SYSTEM SNAPSHOT + CASE SUMMARY -->
+                      <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
 
-            <TextBlock Text="Later we can add: last hunt summary, quick links into Hunt/Persist/Sweep, and open case folder."
-                      FontSize="12"
-                      Foreground="#8FA9AA"
-                      TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-      </TabItem>
+                        <!-- SYSTEM SNAPSHOT CARD -->
+                        <Border Grid.Column="0"
+                                Background="#050E10"
+                                Padding="12"
+                                CornerRadius="6"
+                                BorderBrush="#1A3C3F"
+                                BorderThickness="1">
+                          <StackPanel Spacing="6">
+                            <TextBlock Text="System Snapshot"
+                                      FontSize="14"
+                                      FontWeight="SemiBold"
+                                      Foreground="#EAF7F7" />
+                            <TextBlock x:Name="SystemHostNameText"
+                                      Text="Host: (loading...)"
+                                      FontSize="13"
+                                      Foreground="#C7D4D4" />
+                            <TextBlock x:Name="SystemUserText"
+                                      Text="User: (loading...)"
+                                      FontSize="13"
+                                      Foreground="#C7D4D4" />
+                            <TextBlock x:Name="SystemOsText"
+                                      Text="OS: (loading...)"
+                                      FontSize="13"
+                                      Foreground="#C7D4D4" />
+                          </StackPanel>
+                        </Border>
+
+                        <!-- CASE SUMMARY CARD -->
+                        <Border Grid.Column="1"
+                                Background="#050E10"
+                                Padding="12"
+                                CornerRadius="6"
+                                BorderBrush="#1A3C3F"
+                                BorderThickness="1">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="Current Case"
+                                      FontSize="14"
+                                      FontWeight="SemiBold"
+                                      Foreground="#EAF7F7" />
+
+                            <TextBlock x:Name="CaseIdText"
+                                      Text="Case ID: (none)"
+                                      FontSize="13"
+                                      Foreground="#C7D4D4" />
+
+                            <TextBlock x:Name="CaseEventsCountText"
+                                      Text="Events: 0"
+                                      FontSize="13"
+                                      Foreground="#C7D4D4" />
+
+                            <TextBlock x:Name="CaseLastEventText"
+                                      Text="Last: (no events yet)"
+                                      FontSize="12"
+                                      Foreground="#8FA9AA"
+                                      TextWrapping="Wrap" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        Margin="0,8,0,0">
+                              <Button x:Name="CaseExportButton"
+                                      Content="Export Case Report"
+                                      Width="160"
+                                      Click="CaseExportButton_OnClick" />
+                            </StackPanel>
+                          </StackPanel>
+                        </Border>
+
+                      </Grid>
+
+                      <!-- DASHBOARD STATUS / MESSAGES -->
+                      <TextBlock x:Name="DashboardStatusText"
+                                Text="Status: case initialising..."
+                                FontSize="12"
+                                Foreground="#8FA9AA"
+                                TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                </TabItem>
 
                 <!-- HUNT -->
                 <TabItem Header="Hunt">
@@ -253,90 +303,146 @@
 
                 <!-- SWEEP -->
                 <TabItem Header="Sweep">
-                  <Border Background="#0B1518" Padding="16">
-                    <StackPanel Spacing="12">
+                  <Grid Margin="16"
+                        RowDefinitions="Auto,Auto,*,Auto"
+                        RowSpacing="8">
 
-                      <TextBlock Text="Sweep – recent change radar"
-                                FontSize="20"
-                                FontWeight="SemiBold"
-                                Foreground="#EAF7F7" />
+                    <!-- Title -->
+                    <TextBlock Grid.Row="0"
+                              Text="Sweep – recent change radar"
+                              FontSize="20"
+                              FontWeight="SemiBold"
+                              Margin="0,0,0,8"/>
 
-                      <TextBlock Text="Scan high-signal folders (Desktop, Downloads, Temp, AppData, Startup) for recently created or modified executables, scripts, and archives."
-                                FontSize="13"
-                                Foreground="#C7D4D4"
-                                TextWrapping="Wrap" />
+                    <!-- Controls row -->
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal"
+                                Spacing="12"
+                                VerticalAlignment="Center">
 
-                      <!-- Lookback + Run -->
-                      <StackPanel Orientation="Horizontal"
-                                  Spacing="8">
-                        <TextBlock Text="Look back:"
-                                  VerticalAlignment="Center"
-                                  Foreground="#C4D4D4" />
-                        <ComboBox x:Name="SweepLookbackCombo"
-                                  Width="150">
-                          <ComboBoxItem Content="24 hours" />
-                          <ComboBoxItem Content="3 days"   />
-                          <ComboBoxItem Content="7 days"   />
-                          <ComboBoxItem Content="30 days"  />
-                        </ComboBox>
+                      <TextBlock Text="Look back:"
+                                VerticalAlignment="Center"/>
 
-                        <Button x:Name="SweepRunButton"
-                                Content="Run Sweep"
+                      <ComboBox x:Name="SweepLookbackCombo"
+                                Width="140"
+                                SelectedIndex="0">
+                        <ComboBoxItem Content="24 hours" />
+                        <ComboBoxItem Content="3 days" />
+                        <ComboBoxItem Content="7 days" />
+                        <ComboBoxItem Content="30 days" />
+                      </ComboBox>
+
+                      <Button x:Name="SweepRunButton"
+                              Content="Run Sweep"
+                              Click="SweepRunButton_OnClick" />
+
+                      <Separator Width="16" />
+
+                      <TextBlock Text="Severity:"
+                                VerticalAlignment="Center"/>
+
+                      <ComboBox x:Name="SweepSeverityFilterCombo"
                                 Width="120"
-                                Click="SweepRunButton_OnClick" />
-                      </StackPanel>
+                                SelectedIndex="0"
+                                SelectionChanged="SweepSeverityFilterCombo_OnSelectionChanged">
+                        <ComboBoxItem Content="All" />
+                        <ComboBoxItem Content="High only" />
+                        <ComboBoxItem Content="Medium only" />
+                        <ComboBoxItem Content="Low only" />
+                      </ComboBox>
 
-                      <!-- Status -->
+                      <CheckBox x:Name="SweepShowOnlyFlaggedCheckBox"
+                                Content="MED/HIGH only"
+                                Margin="8,0,0,0"
+                                IsChecked="True"
+                                Checked="SweepFilterCheckBox_OnChanged"
+                                Unchecked="SweepFilterCheckBox_OnChanged"/>
+
                       <TextBlock x:Name="SweepStatusText"
-                                Text="Status: idle."
-                                FontSize="12"
-                                Foreground="#8FA9AA"
-                                Margin="0,4,0,0" />
-
-                      <!-- Actions -->
-                      <StackPanel Orientation="Horizontal"
-                                  Spacing="8"
-                                  Margin="0,4,0,0">
-                        <Button x:Name="SweepCopyResultsButton"
-                                Content="Copy Results"
-                                Width="120"
-                                Click="SweepCopyResultsButton_OnClick" />
-                        <Button x:Name="SweepSaveResultsButton"
-                                Content="Save Snapshot"
-                                Width="130"
-                                Click="SweepSaveResultsButton_OnClick" />
-                        <CheckBox x:Name="SweepShowOnlyFlaggedCheckBox"
-                                  Content="Show only flagged items"
-                                  Foreground="#FF6B6B"
-                                  Checked="SweepFilterCheckBox_OnChanged"
-                                  Unchecked="SweepFilterCheckBox_OnChanged" />
-                      </StackPanel>
-
-                      <!-- Results -->
-                      <Border Background="#050E10"
-                              Padding="8"
-                              CornerRadius="4"
-                              BorderBrush="#1A3C3F"
-                              BorderThickness="1"
-                              Margin="0,8,0,0">
-                        <StackPanel>
-                          <TextBlock Text="Results"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Foreground="#EAF7F7"
-                                    Margin="0,0,0,6" />
-
-                          <ListBox x:Name="SweepResultsList"
-                                  Height="660"
-                                  Background="#050E10"
-                                  BorderThickness="0"
-                                  Foreground="#C7D4D4" />
-                        </StackPanel>
-                      </Border>
-
+                                Margin="24,0,0,0"
+                                VerticalAlignment="Center"
+                                Text="Status: idle."/>
                     </StackPanel>
-                  </Border>
+
+                            <!-- Search + results -->
+                            <Grid Grid.Row="2"
+                                  RowDefinitions="Auto,*"
+                                  RowSpacing="8">
+
+                              <!-- Search box -->
+                              <TextBox Grid.Row="0"
+                                      x:Name="SweepSearchTextBox"
+                                      Watermark="Search name / path / reason"
+                                      TextChanged="SweepSearchTextBox_OnTextChanged"/>
+
+                              <!-- Scrollable results -->
+                              <ListBox Grid.Row="1"
+                                      x:Name="SweepResultsList"
+                                      VerticalAlignment="Stretch">
+                                <ListBox.ItemTemplate>
+                                  <DataTemplate x:DataType="models:SweepEntry">
+                                    <Border Margin="0,2"
+                                            Padding="6"
+                                            Background="#121b1f">
+                                      <StackPanel Spacing="2">
+                                          <!-- First line: severity, category, name -->
+                                          <TextBlock>
+                                            <Run Text="["/>
+                                            <Run Text="{Binding Category}" />
+                                            <Run Text="] " />
+                                            <Run Text="{Binding Severity}" />
+                                            <Run Text=" — " />
+                                            <Run Text="{Binding Name}" />
+                                          </TextBlock>
+
+                                          <!-- Path -->
+                                          <TextBlock Text="{Binding Path}"
+                                                    FontSize="11"
+                                                    Foreground="#c0c0c0" />
+
+                                          <!-- Modified + Source -->
+                                          <TextBlock FontSize="11"
+                                                    Foreground="#a0a0a0">
+                                            <Run Text="Modified: " />
+                                            <Run Text="{Binding Modified}" />
+                                            <Run Text="  •  Source: " />
+                                            <Run Text="{Binding Source}" />
+                                          </TextBlock>
+
+                                          <!-- Reason -->
+                                          <TextBlock FontSize="11"
+                                                    TextWrapping="Wrap">
+                                            <Run Text="Reason: "
+                                                FontWeight="SemiBold"
+                                                Foreground="#ffb347" />
+                                            <Run Text="{Binding Reason}"
+                                                Foreground="#ffd47f" />
+                                          </TextBlock>
+                                        </StackPanel>
+
+                                    </Border>
+                                  </DataTemplate>
+                                </ListBox.ItemTemplate>
+                              </ListBox>
+                            </Grid>
+
+                    <!-- Buttons -->
+                    <StackPanel Grid.Row="3"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Left">
+                      <Button x:Name="SweepCopyResultsButton"
+                              Content="Copy Results"
+                              Click="SweepCopyResultsButton_OnClick"/>
+                      <Button x:Name="SweepSaveResultsButton"
+                              Content="Save Snapshot"
+                              Click="SweepSaveResultsButton_OnClick"/>
+                    </StackPanel>
+
+                  </Grid>
                 </TabItem>
+
+
 
         <!-- CLEANUP -->
         <TabItem Header="Cleanup">
@@ -358,15 +464,114 @@
           </Border>
         </TabItem>
 
-        <!-- CASE -->
-        <TabItem Header="Case">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Case tab shell — evidence cart and reporting."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
-          </Border>
-        </TabItem>
+                <!-- CASE -->
+                <TabItem Header="Case">
+                  <Border Background="#0B1518" Padding="16">
+                    <StackPanel Orientation="Vertical" Spacing="12">
+
+                      <!-- TITLE -->
+                      <TextBlock Text="Case timeline"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                Foreground="#EAF7F7" />
+
+                      <TextBlock Text="Everything that has happened in this incident: scans, findings, and actions. Export this log for your ticket or IR lead."
+                                FontSize="13"
+                                Foreground="#8FA9AA"
+                                TextWrapping="Wrap" />
+
+                      <!-- SUMMARY ROW -->
+                      <Grid ColumnDefinitions="*,*,*,*" Margin="0,8,0,0">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="Case ID"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+                          <TextBlock x:Name="CaseSummaryIdText"
+                                    Text="(no case yet)"
+                                    FontSize="13"
+                                    Foreground="#C7D4D4" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="Host"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+                          <TextBlock x:Name="CaseSummaryHostText"
+                                    Text="(host)"
+                                    FontSize="13"
+                                    Foreground="#C7D4D4" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="User"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+                          <TextBlock x:Name="CaseSummaryUserText"
+                                    Text="(user)"
+                                    FontSize="13"
+                                    Foreground="#C7D4D4" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="Started"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+                          <TextBlock x:Name="CaseSummaryStartedText"
+                                    Text="(time)"
+                                    FontSize="13"
+                                    Foreground="#C7D4D4" />
+                        </StackPanel>
+                      </Grid>
+
+                      <!-- BUTTONS -->
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="8"
+                                  Margin="0,12,0,0">
+                        <Button Content="Refresh"
+                                Width="100"
+                                Click="CaseRefreshButton_OnClick" />
+                        <Button Content="Export case report"
+                                Width="160"
+                                Click="CaseExportButton_OnClick" />
+                      </StackPanel>
+
+                      <!-- EVENTS LIST -->
+                      <Border Margin="0,12,0,0"
+                              Background="#050E10"
+                              Padding="8">
+                        <ListBox x:Name="CaseEventsList"
+                                BorderThickness="0">
+                          <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:CaseEvent">
+                              <StackPanel Margin="0,4" Spacing="2">
+                                <TextBlock Text="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}"
+                                          FontSize="11"
+                                          Foreground="#7FA3A4" />
+                                <TextBlock>
+                                  <Run Text="[" />
+                                  <Run Text="{Binding Tab}" />
+                                  <Run Text="] " />
+                                  <Run Text="{Binding Severity}" />
+                                  <Run Text=" – " />
+                                  <Run Text="{Binding Action}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding Target}"
+                                          FontSize="11"
+                                          Foreground="#9FB9BA"
+                                          TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Details}"
+                                          FontSize="11"
+                                          Foreground="#9FB9BA"
+                                          TextWrapping="Wrap" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ListBox.ItemTemplate>
+                        </ListBox>
+                      </Border>
+
+                    </StackPanel>
+                  </Border>
+                </TabItem>
 
         <!-- HELP -->
         <TabItem Header="Help">

@@ -7,6 +7,7 @@ using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
+using ViperKit.UI.Models;
 using ViperKit.UI;
 
 
@@ -16,6 +17,28 @@ public partial class MainWindow
 {
     // Cache of last run so we can filter without rescanning
     private readonly List<string> _persistEntries = new();
+    private void LogCaseAndRefresh(string tab, string action, string severity, string target, string details)
+    {
+        try
+        {
+            CaseManager.AddEvent(tab, action, severity, target, details);
+        }
+        catch
+        {
+            // Case logging must never break the UI
+        }
+
+        try
+        {
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch
+        {
+            // Dashboard/case refresh failures are non-fatal
+        }
+    }
+
 
     // =========================
     // PERSIST TAB – PERSISTENCE MAP
@@ -119,6 +142,34 @@ public partial class MainWindow
             {
                 // JSON logging failure should never break the scan
             }
+
+            // 3) Case event log
+            try
+            {
+                CaseManager.AddEvent(
+                    tab: "Persist",
+                    action: "Persistence scan completed",
+                    severity: flaggedCount > 0 ? "WARN" : "INFO",
+                    target: $"Entries: {_persistEntries.Count}",
+                    details: flaggedCount > 0
+                        ? $"Flagged entries: {flaggedCount}"
+                        : "No CHECK-rated entries found.");
+            }
+            catch
+            {
+                // Case logging must never break the scan
+            }
+
+            // Update dashboard + case tab summaries
+            try
+            {
+                UpdateDashboardCaseSummary();
+                RefreshCaseTab();
+            }
+            catch
+            {
+            }
+
         }
         catch (Exception ex)
         {
@@ -501,6 +552,14 @@ public partial class MainWindow
                     PersistStatusText.Text =
                         $"Status: opened Services.msc – look for display name '{displayName}' (service name: {serviceName}).";
                 }
+
+                LogCaseAndRefresh(
+                    tab: "Persist",
+                    action: "Opened Services.msc for service",
+                    severity: "NOTE",
+                    target: serviceName,
+                    details: $"Display name: {displayName}");
+
             }
             catch
             {
@@ -531,6 +590,14 @@ public partial class MainWindow
                 if (PersistStatusText != null)
                     PersistStatusText.Text =
                         $"Status: opened Regedit – navigate to {regPath} to inspect this autorun.";
+
+                LogCaseAndRefresh(
+                    tab: "Persist",
+                    action: "Opened Regedit for autorun key",
+                    severity: "NOTE",
+                    target: regPath,
+                    details: "Technician reviewing autorun entry in registry.");
+
             }
             catch
             {
@@ -568,27 +635,41 @@ public partial class MainWindow
             {
                 if (PersistStatusText != null)
                     PersistStatusText.Text = $"Status: startup item not found on disk: {startupPath}";
-            }
-            else
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName      = "explorer.exe",
-                        Arguments     = $"/select,\"{startupPath}\"",
-                        UseShellExecute = true
-                    });
 
-                    if (PersistStatusText != null)
-                        PersistStatusText.Text = $"Status: opened Startup item in Explorer: {startupPath}.";
-                }
-                catch
-                {
-                    if (PersistStatusText != null)
-                        PersistStatusText.Text = "Status: failed to open Explorer for startup item.";
-                }
+                LogCaseAndRefresh(
+                    tab: "Persist",
+                    action: "Startup entry missing on disk",
+                    severity: "WARN",
+                    target: startupPath,
+                    details: "Listed startup entry could not be found on disk.");
             }
+                else
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName        = "explorer.exe",
+                            Arguments       = $"/select,\"{startupPath}\"",
+                            UseShellExecute = true
+                        });
+
+                        if (PersistStatusText != null)
+                            PersistStatusText.Text = $"Status: opened Startup item in Explorer: {startupPath}.";
+
+                        LogCaseAndRefresh(
+                            tab: "Persist",
+                            action: "Opened startup item in Explorer",
+                            severity: "NOTE",
+                            target: startupPath,
+                            details: "Technician reviewing startup executable/shortcut.");
+                    }
+                    catch
+                    {
+                        if (PersistStatusText != null)
+                            PersistStatusText.Text = $"Status: could not open Startup item: {startupPath}.";
+                    }
+                }
 
             return;
         }

@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using Microsoft.Win32;
+using ViperKit.UI.Models;
 
 namespace ViperKit.UI.Views;
 
@@ -46,14 +46,12 @@ public partial class MainWindow
                     _ => $"Unknown ({startRaw})"
                 };
 
-                bool include = false;
                 bool flagged = false;
                 var reasons  = new List<string>();
 
                 // 1) Missing binary
                 if (!exists)
                 {
-                    include = true;
                     flagged = true;
                     reasons.Add("service/driver binary missing on disk");
                 }
@@ -81,7 +79,6 @@ public partial class MainWindow
                     string riskLabel = BuildRiskLabel(exePath, exists);
                     if (riskLabel.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
                     {
-                        include = true;
                         flagged = true;
                         reasons.Add(riskLabel.Replace("CHECK –", "").Trim());
                     }
@@ -90,7 +87,6 @@ public partial class MainWindow
                 // 4) Non-MS drivers
                 if (isDriver && !isMicrosoft)
                 {
-                    include = true;
                     flagged = true;
                     reasons.Add("non-Microsoft driver");
                 }
@@ -98,7 +94,6 @@ public partial class MainWindow
                 // 5) Random-looking service names
                 if (serviceName.Length >= 20 && !serviceName.Contains(' ', StringComparison.Ordinal))
                 {
-                    include = true;
                     flagged = true;
                     reasons.Add("service name looks randomized");
                 }
@@ -106,72 +101,46 @@ public partial class MainWindow
                 // 6) Boot/System non-MS drivers
                 if ((startRaw == 0 || startRaw == 1) && !isMicrosoft && isDriver)
                 {
-                    include = true;
                     flagged = true;
                     reasons.Add("boot/system driver from non-Microsoft binary");
                 }
-
-                if (!include)
-                    continue;
-
-                string flagReason = string.Join(", ", reasons);
 
                 // --------- SEVERITY FOR SERVICES / DRIVERS ----------
                 string severity = "LOW";
                 if (flagged)
                 {
-                    // HIGH if missing binary OR boot/system non-MS driver
-                    bool high = false;
-                    foreach (var r in reasons)
-                    {
-                        if (r.Contains("missing on disk", StringComparison.OrdinalIgnoreCase) ||
-                            r.Contains("boot/system driver", StringComparison.OrdinalIgnoreCase))
-                        {
-                            high = true;
-                            break;
-                        }
-                    }
+                    bool high = reasons.Exists(r =>
+                        r.Contains("missing on disk", StringComparison.OrdinalIgnoreCase) ||
+                        r.Contains("boot/system driver", StringComparison.OrdinalIgnoreCase));
 
                     severity = high ? "HIGH" : "MEDIUM";
                 }
 
-                // --------- BUILD OUTPUT BLOCK ----------
-                var sb = new StringBuilder();
-                sb.AppendLine(isDriver
-                    ? "[Sweep] Driver (deep)"
-                    : "[Sweep] Service (deep)");
-                sb.AppendLine($"  Name:      {serviceName}");
-                sb.AppendLine($"  Display:   {displayName}");
-                sb.AppendLine($"  StartType: {startLabel}");
-                sb.AppendLine($"  Command:   {rawImage}");
-
-                if (!string.IsNullOrWhiteSpace(rawImage) &&
-                    !string.Equals(rawImage, expanded, StringComparison.OrdinalIgnoreCase))
+                var entry = new SweepEntry
                 {
-                    sb.AppendLine($"  Expanded:  {expanded}");
-                }
+                    Category = isDriver ? "Driver" : "Service",
+                    Severity = severity,
+                    Path     = exePath,
+                    Name     = serviceName,
+                    Source   = "Services/Drivers",
+                    Reason   = reasons.Count > 0
+                        ? string.Join(", ", reasons)
+                        : string.Empty
+                };
 
-                if (hasExe)
-                {
-                    string existsLabel = exists ? "(exists)" : "(MISSING)";
-                    sb.AppendLine($"  Executable: {exePath} {existsLabel}");
-                }
-                else
-                {
-                    sb.AppendLine("  Executable: (could not parse from ImagePath)");
-                }
-
-                sb.AppendLine($"  Severity:  {severity}");
-
-                if (severity != "LOW" && !string.IsNullOrEmpty(flagReason))
-                    sb.AppendLine($">>> Reasons: {flagReason} <<<");
-
-                _sweepEntries.Add(sb.ToString());
+                _sweepEntries.Add(entry);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Sweep is best-effort; if this fails, we just skip it.
+            // If the services sweep itself blows up, record that as a LOW severity error entry
+            _sweepEntries.Add(new SweepEntry
+            {
+                Category = "Error",
+                Severity = "LOW",
+                Source   = "Services/Drivers",
+                Reason   = ex.Message
+            });
         }
     }
 
