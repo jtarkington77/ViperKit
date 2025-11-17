@@ -7,125 +7,51 @@ using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
-using ViperKit.UI.Models;
 using ViperKit.UI;
-
+using ViperKit.UI.Models;
 
 namespace ViperKit.UI.Views;
 
 public partial class MainWindow
 {
-    // Cache of last run so we can filter without rescanning
-    private readonly List<string> _persistEntries = new();
-    private void LogCaseAndRefresh(string tab, string action, string severity, string target, string details)
-    {
-        try
-        {
-            CaseManager.AddEvent(tab, action, severity, target, details);
-        }
-        catch
-        {
-            // Case logging must never break the UI
-        }
+    // In-memory list of persistence entries for the current scan
+    private readonly List<PersistItem> _persistItems = new();
 
-        try
-        {
-            UpdateDashboardCaseSummary();
-            RefreshCaseTab();
-        }
-        catch
-        {
-            // Dashboard/case refresh failures are non-fatal
-        }
-    }
-
-
-    // =========================
-    // PERSIST TAB – PERSISTENCE MAP
-    // =========================
+    // ----------------------------
+    // PERSIST – main entry point
+    // ----------------------------
     private void PersistRunButton_OnClick(object? sender, RoutedEventArgs e)
     {
         if (PersistStatusText != null)
             PersistStatusText.Text = "Status: scanning common persistence locations...";
 
         if (PersistResultsList != null)
-            PersistResultsList.ItemsSource = Array.Empty<string>();
+            PersistResultsList.ItemsSource = Array.Empty<PersistItem>();
 
-        _persistEntries.Clear();
+        _persistItems.Clear();
 
         try
         {
-            // -------------------------
-            // 1) Autoruns – HKCU/HKLM
-            // -------------------------
+            // 1) Registry Run / RunOnce – 32/64-bit, HKCU + HKLM
+            CollectRunKeyAutoruns();
 
-            // HKCU Run / RunOnce
-            EnumerateRunKey(
-                Registry.CurrentUser,
-                @"Software\Microsoft\Windows\CurrentVersion\Run",
-                "HKCU",
-                _persistEntries);
+            // 2) Startup folders – per-user + all users
+            CollectStartupFolderAutoruns();
 
-            EnumerateRunKey(
-                Registry.CurrentUser,
-                @"Software\Microsoft\Windows\CurrentVersion\RunOnce",
-                "HKCU",
-                _persistEntries);
+            // Count how many items are flagged as CHECK
+            int flaggedCount = _persistItems.Count(p =>
+                p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
 
-            // HKLM Run / RunOnce (combined 32/64 view)
-            EnumerateRunKey(
-                Registry.LocalMachine,
-                @"Software\Microsoft\Windows\CurrentVersion\Run",
-                "HKLM",
-                _persistEntries);
-
-            EnumerateRunKey(
-                Registry.LocalMachine,
-                @"Software\Microsoft\Windows\CurrentVersion\RunOnce",
-                "HKLM",
-                _persistEntries);
-
-            // Wow6432Node Run / RunOnce – 32-bit apps on 64-bit Windows
-            EnumerateRunKey(
-                Registry.LocalMachine,
-                @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
-                "HKLM (Wow6432Node)",
-                _persistEntries);
-
-            EnumerateRunKey(
-                Registry.LocalMachine,
-                @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce",
-                "HKLM (Wow6432Node)",
-                _persistEntries);
-
-            // -------------------------
-            // 2) Startup folders
-            // -------------------------
-            string currentUserStartup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            string allUsersStartup    = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
-
-            EnumerateStartupFolder(currentUserStartup, "Startup (Current User)", _persistEntries);
-            EnumerateStartupFolder(allUsersStartup,    "Startup (All Users)",     _persistEntries);
-
-            // -------------------------
-            // 3) Auto-start services (registry-based)
-            // -------------------------
-            EnumerateAutoServices(_persistEntries);
-
-            // Count "CHECK" entries for quick triage
-            int flaggedCount = _persistEntries.Count(
-                s => s.Contains(">>> RISK: CHECK", StringComparison.OrdinalIgnoreCase));
-
-            // Bind results respecting filter checkbox
+            // Bind into UI ListBox (respecting "show only CHECK" checkbox)
             BindPersistResults();
 
             if (PersistStatusText != null)
             {
                 PersistStatusText.Text =
-                    $"Status: found {_persistEntries.Count} persistence entry/entries; {flaggedCount} marked 'CHECK'.";
+                    $"Status: found {_persistItems.Count} persistence entry/entries; {flaggedCount} marked 'CHECK'.";
             }
 
-            // -------- JSON log for this persistence snapshot --------
+            // JSON log of this snapshot (lightweight, for later case review)
             try
             {
                 JsonLog.Append("persist", new
@@ -133,53 +59,77 @@ public partial class MainWindow
                     Timestamp    = DateTime.Now,
                     Host         = Environment.MachineName,
                     User         = Environment.UserName,
-                    TotalEntries = _persistEntries.Count,
+                    TotalEntries = _persistItems.Count,
                     FlaggedCount = flaggedCount,
-                    Entries      = _persistEntries
+                    Entries      = _persistItems.Select(p => new
+                    {
+                        p.Source,
+                        p.LocationType,
+                        p.Name,
+                        p.Path,
+                        p.RegistryPath,
+                        p.Risk,
+                        p.Reason,
+                        p.MitreTechnique
+                    }).ToArray()
                 });
             }
             catch
             {
-                // JSON logging failure should never break the scan
+                // Logging should never break UI
             }
 
-            // 3) Case event log
+            // Case log summary
             try
             {
                 CaseManager.AddEvent(
                     tab: "Persist",
                     action: "Persistence scan completed",
                     severity: flaggedCount > 0 ? "WARN" : "INFO",
-                    target: $"Entries: {_persistEntries.Count}",
+                    target: $"Entries: {_persistItems.Count}",
                     details: flaggedCount > 0
-                        ? $"Flagged entries: {flaggedCount}"
-                        : "No CHECK-rated entries found.");
+                        ? $"{flaggedCount} entry/entries marked CHECK."
+                        : "No entries marked CHECK.");
             }
             catch
             {
-                // Case logging must never break the scan
+                // Case logging must not crash UI
             }
-
-            // Update dashboard + case tab summaries
-            try
-            {
-                UpdateDashboardCaseSummary();
-                RefreshCaseTab();
-            }
-            catch
-            {
-            }
-
         }
         catch (Exception ex)
         {
             if (PersistStatusText != null)
-                PersistStatusText.Text = "Status: error while scanning persistence.";
+                PersistStatusText.Text = $"Status: error running persistence scan – {ex.Message}";
 
-            if (PersistResultsList != null)
-                PersistResultsList.ItemsSource = new[] { $"Error: {ex.Message}" };
+            // Record a failure entry so something shows up in the list
+            _persistItems.Add(new PersistItem
+            {
+                Source         = "Persist",
+                LocationType   = "Error",
+                Name           = "Persistence scan failed",
+                Path           = string.Empty,
+                RegistryPath   = string.Empty,
+                Risk           = "CHECK – scan error",
+                Reason         = ex.Message,
+                MitreTechnique = string.Empty
+            });
+
+            BindPersistResults();
+
+            try
+            {
+                CaseManager.AddEvent(
+                    tab: "Persist",
+                    action: "Persistence scan error",
+                    severity: "WARN",
+                    target: "(scan failed)",
+                    details: ex.Message);
+            }
+            catch
+            {
+            }
         }
-}
+    }
 
     // Central place to apply "show only CHECK" filter
     private void BindPersistResults()
@@ -187,30 +137,70 @@ public partial class MainWindow
         if (PersistResultsList == null)
             return;
 
-        IEnumerable<string> source = _persistEntries;
+        IEnumerable<PersistItem> source = _persistItems;
 
         if (PersistShowCheckOnlyCheckBox?.IsChecked == true)
         {
-            source = source.Where(s =>
-                s.Contains(">>> RISK: CHECK", StringComparison.OrdinalIgnoreCase));
+            source = source.Where(p =>
+                p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
         }
 
-        PersistResultsList.ItemsSource = source.ToList();
+        PersistResultsList.ItemsSource = source.ToArray();
     }
 
+    // Checkbox toggled
     private void PersistFilterCheckBox_OnChanged(object? sender, RoutedEventArgs e)
     {
         BindPersistResults();
     }
 
-#pragma warning disable CA1416 // Windows-only APIs (Registry)
+    // Investigate button
+    private void PersistOpenSelectedButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var item = PersistResultsList?.SelectedItem as PersistItem;
+        if (item == null)
+            return;
 
-    // -------- Autorun keys --------
-    private void EnumerateRunKey(
-        RegistryKey root,
-        string subKeyPath,
-        string hiveLabel,
-        List<string> output)
+        OpenPersistItem(item);
+    }
+
+    // Double-click on list item
+    private void PersistResultsList_OnDoubleTapped(object? sender, RoutedEventArgs e)
+    {
+        var item = PersistResultsList?.SelectedItem as PersistItem;
+        if (item == null)
+            return;
+
+        OpenPersistItem(item);
+    }
+
+    // -----------------------------------------
+    // COLLECTORS – Run keys + Startup folders
+    // -----------------------------------------
+#pragma warning disable CA1416 // Windows-only APIs
+
+    private void CollectRunKeyAutoruns()
+    {
+        // HKCU
+        CollectRunKeyHive("HKCU Run", Registry.CurrentUser,
+            @"Software\Microsoft\Windows\CurrentVersion\Run", "T1547.001");
+        CollectRunKeyHive("HKCU RunOnce", Registry.CurrentUser,
+            @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
+
+        // HKLM 64-bit
+        CollectRunKeyHive("HKLM Run", Registry.LocalMachine,
+            @"Software\Microsoft\Windows\CurrentVersion\Run", "T1547.001");
+        CollectRunKeyHive("HKLM RunOnce", Registry.LocalMachine,
+            @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
+
+        // HKLM Wow6432Node (32-bit autoruns on 64-bit OS)
+        CollectRunKeyHive("HKLM Wow6432Node Run", Registry.LocalMachine,
+            @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run", "T1547.001");
+        CollectRunKeyHive("HKLM Wow6432Node RunOnce", Registry.LocalMachine,
+            @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
+    }
+
+    private void CollectRunKeyHive(string label, RegistryKey root, string subKeyPath, string mitreId)
     {
         try
         {
@@ -220,510 +210,282 @@ public partial class MainWindow
 
             foreach (var valueName in key.GetValueNames())
             {
-                object? rawObj   = key.GetValue(valueName);
-                string  rawValue = rawObj?.ToString() ?? "(non-string value)";
-
-                // Expand %PATH% style vars
-                string expanded    = Environment.ExpandEnvironmentVariables(rawValue);
-                string probableExe = ExtractExecutablePath(expanded);
-
-                bool hasExe = !string.IsNullOrWhiteSpace(probableExe);
-                bool exists = hasExe && File.Exists(probableExe);
-
-                var sb = new StringBuilder();
-                sb.AppendLine($"[Run] {hiveLabel}\\{subKeyPath}");
-                sb.AppendLine($"  Name:      {valueName}");
-                sb.AppendLine($"  Command:   {rawValue}");
-
-                if (!string.Equals(rawValue, expanded, StringComparison.OrdinalIgnoreCase))
-                    sb.AppendLine($"  Expanded:  {expanded}");
-
-                if (hasExe)
+                object? value = null;
+                try
                 {
-                    string existsLabel = exists ? "(exists)" : "(MISSING)";
-                    sb.AppendLine($"  Executable: {probableExe} {existsLabel}");
+                    value = key.GetValue(valueName);
+                }
+                catch
+                {
+                    // Skip unreadable values
+                }
 
-                    string risk = BuildRiskLabel(probableExe, exists);
+                string? raw = value?.ToString();
+                string expandedPath = raw ?? string.Empty;
 
-                    if (risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
-                        sb.AppendLine($"  >>> RISK: {risk} <<<");
-                    else
-                        sb.AppendLine($"  Risk:      {risk}");
+                // Expand environment variables if present
+                if (!string.IsNullOrWhiteSpace(expandedPath) &&
+                    expandedPath.Contains('%'))
+                {
+                    expandedPath = Environment.ExpandEnvironmentVariables(expandedPath);
+                }
+
+                // Extract executable-ish path (first token before any arguments)
+                string exePath = ExtractExecutablePath(expandedPath);
+
+                // Basic risk heuristic for help-desk
+                string risk;
+                string reason;
+
+                if (string.IsNullOrWhiteSpace(exePath))
+                {
+                    risk   = "CHECK – empty or non-path value";
+                    reason = "Registry Run entry without a clear executable path.";
+                }
+                else if (IsSuspiciousLocation(exePath))
+                {
+                    risk   = "CHECK – unusual location";
+                    reason = $"Executable under user/temporary path: {exePath}";
                 }
                 else
                 {
-                    sb.AppendLine("  Executable: (could not parse from command line)");
-                    sb.AppendLine("  Risk:      UNKNOWN – no executable parsed");
+                    risk   = "OK";
+                    reason = "Common location for startup program.";
                 }
 
-                output.Add(sb.ToString());
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = label,
+                    LocationType   = "Autorun (Registry)",
+                    Name           = valueName,
+                    Path           = exePath,
+                    RegistryPath   = $"{root.Name}\\{subKeyPath}",
+                    Risk           = risk,
+                    Reason         = reason,
+                    MitreTechnique = mitreId
+                });
             }
         }
         catch
         {
-            // Ignore individual key failures
+            // Ignore hive-level errors; nothing we can safely do
         }
     }
 
-    // -------- Startup folders --------
-    private void EnumerateStartupFolder(
-        string? folderPath,
-        string label,
-        List<string> output)
+    private void CollectStartupFolderAutoruns()
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
-                return;
+            string? appData   = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            string? commonApp = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
 
-            foreach (var file in Directory.EnumerateFiles(folderPath))
+            if (!string.IsNullOrWhiteSpace(appData) && Directory.Exists(appData))
             {
-                var info = new FileInfo(file);
+                CollectStartupFolder("Startup (current user)", appData, "T1547.009");
+            }
 
-                var sb = new StringBuilder();
-                sb.AppendLine($"[Startup] {label}");
-                sb.AppendLine($"  Name:     {info.Name}");
-                sb.AppendLine($"  Path:     {info.FullName}");
-                sb.AppendLine($"  Type:     {info.Extension}");
-                sb.AppendLine($"  Modified: {info.LastWriteTime}");
-
-                if (string.Equals(info.Extension, ".exe", StringComparison.OrdinalIgnoreCase))
-                {
-                    bool exists = File.Exists(info.FullName);
-                    string existsLabel = exists ? "(exists)" : "(MISSING)";
-                    sb.AppendLine($"  Executable: {info.FullName} {existsLabel}");
-
-                    string risk = BuildRiskLabel(info.FullName, exists);
-
-                    if (risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
-                        sb.AppendLine($"  >>> RISK: {risk} <<<");
-                    else
-                        sb.AppendLine($"  Risk:      {risk}");
-                }
-                else if (string.Equals(info.Extension, ".lnk", StringComparison.OrdinalIgnoreCase))
-                {
-                    sb.AppendLine("  Note: .lnk shortcut – target not resolved (check manually).");
-                    sb.AppendLine("  Risk:      UNKNOWN – shortcut, inspect target");
-                }
-
-                output.Add(sb.ToString());
+            if (!string.IsNullOrWhiteSpace(commonApp) && Directory.Exists(commonApp))
+            {
+                CollectStartupFolder("Startup (all users)", commonApp, "T1547.009");
             }
         }
         catch
         {
-            // Startup folders can have permission issues; ignore individual failures.
+            // Fail silently; worst case the tab just shows fewer entries
         }
     }
 
-    // -------- Auto services (registry-based) --------
-    private void EnumerateAutoServices(List<string> output)
+    private void CollectStartupFolder(string label, string folderPath, string mitreId)
     {
         try
         {
-            using var servicesRoot = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services");
-            if (servicesRoot == null)
-                return;
-
-            string systemRoot = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
-
-            foreach (var serviceName in servicesRoot.GetSubKeyNames())
+            foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly))
             {
-                using var svcKey = servicesRoot.OpenSubKey(serviceName);
-                if (svcKey == null)
-                    continue;
+                string name    = Path.GetFileName(file);
+                string risk;
+                string reason;
 
-                // "Start" DWORD: 2 = Automatic
-                object? startObj   = svcKey.GetValue("Start");
-                int     startValue = startObj is int i ? i : -1;
-                if (startValue != 2)
-                    continue; // not Automatic
-
-                // Delayed start?
-                bool delayed = false;
-                object? delayedObj = svcKey.GetValue("DelayedAutoStart");
-                if (delayedObj is int d && d == 1)
-                    delayed = true;
-
-                string displayName  = svcKey.GetValue("DisplayName")?.ToString() ?? "(no DisplayName)";
-                string rawImagePath = svcKey.GetValue("ImagePath")?.ToString() ?? "(no ImagePath)";
-
-                string expanded = Environment.ExpandEnvironmentVariables(rawImagePath);
-                string probableExe = ExtractExecutablePath(expanded);
-
-                // Normalise common driver formats like:
-                //   system32\drivers\foo.sys
-                //   \SystemRoot\System32\drivers\foo.sys
-                if (!string.IsNullOrWhiteSpace(probableExe) && !Path.IsPathRooted(probableExe))
+                if (IsSuspiciousLocation(file))
                 {
-                    string lower = probableExe.ToLowerInvariant();
-
-                    if (lower.StartsWith(@"system32\", StringComparison.OrdinalIgnoreCase))
-                    {
-                        probableExe = Path.Combine(systemRoot, probableExe);
-                    }
-                    else if (lower.StartsWith(@"\systemroot\", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string rest = probableExe.Substring(@"\SystemRoot\".Length);
-                        probableExe = Path.Combine(systemRoot, rest);
-                    }
-                }
-
-                bool hasExe = !string.IsNullOrWhiteSpace(probableExe);
-                bool exists = hasExe && File.Exists(probableExe);
-
-                var sb = new StringBuilder();
-                sb.AppendLine($"[Service] {serviceName}");
-                sb.AppendLine($"  Display:   {displayName}");
-                sb.AppendLine($"  StartType: {(delayed ? "Automatic (Delayed Start)" : "Automatic")}");
-                sb.AppendLine($"  Command:   {rawImagePath}");
-
-                if (!string.Equals(rawImagePath, expanded, StringComparison.OrdinalIgnoreCase))
-                    sb.AppendLine($"  Expanded:  {expanded}");
-
-                if (hasExe)
-                {
-                    string existsLabel = exists ? "(exists)" : "(MISSING)";
-                    sb.AppendLine($"  Executable: {probableExe} {existsLabel}");
-
-                    string risk = BuildRiskLabel(probableExe, exists);
-
-                    if (risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
-                        sb.AppendLine($"  >>> RISK: {risk} <<<");
-                    else
-                        sb.AppendLine($"  Risk:      {risk}");
+                    risk   = "CHECK – unusual location";
+                    reason = "Startup item under user/temporary path.";
                 }
                 else
                 {
-                    sb.AppendLine("  Executable: (could not parse from ImagePath)");
-                    sb.AppendLine("  Risk:      UNKNOWN – no executable parsed");
+                    risk   = "OK";
+                    reason = "Startup shortcut or executable in standard folder.";
                 }
 
-                output.Add(sb.ToString());
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = label,
+                    LocationType   = "Startup folder",
+                    Name           = name,
+                    Path           = file,
+                    RegistryPath   = folderPath,
+                    Risk           = risk,
+                    Reason         = reason,
+                    MitreTechnique = mitreId
+                });
             }
         }
         catch
         {
-            // If services enumeration fails entirely, just skip it; the rest is still useful.
+            // Ignore folder-level errors
         }
     }
-
 
 #pragma warning restore CA1416
 
-    // ---- Shared helper for parsing exe path ----
-    private static string ExtractExecutablePath(string command)
+    // -----------------------------------------
+    // OPEN / INVESTIGATE helpers
+    // -----------------------------------------
+    private void OpenPersistItem(PersistItem item)
     {
-        if (string.IsNullOrWhiteSpace(command))
-            return string.Empty;
-
-        string trimmed = command.Trim();
-
-        // Quoted path first:  "C:\Program Files\X\y.exe" /stuff
-        if (trimmed.StartsWith("\"", StringComparison.Ordinal))
-        {
-            int closing = trimmed.IndexOf('"', 1);
-            if (closing > 1)
-            {
-                return trimmed.Substring(1, closing - 1);
-            }
-        }
-
-        // Otherwise, take first token up to the first space
-        int    spaceIdx  = trimmed.IndexOf(' ');
-        string candidate = spaceIdx > 0 ? trimmed[..spaceIdx] : trimmed;
-
-        // Sanity check: must contain a backslash and a dot
-        if (!candidate.Contains('\\') || !candidate.Contains('.'))
-            return string.Empty;
-
-        return candidate;
-    }
-
-    // ---- classifier ----
-    private static string BuildRiskLabel(string? exePath, bool exists)
-    {
-        if (string.IsNullOrWhiteSpace(exePath))
-            return "UNKNOWN – no executable parsed";
-
-        string lower = exePath.ToLowerInvariant();
-        var flags = new List<string>();
-
-        // Does the file actually exist?
-        if (!exists)
-            flags.Add("MISSING exe");
-
-        // Suspicious locations
-        if (lower.Contains(@"\appdata\"))
-            flags.Add("runs from AppData");
-        if (lower.Contains(@"\temp\"))
-            flags.Add("runs from Temp");
-        if (lower.Contains(@"\users\"))
-            flags.Add("runs from user profile");
-
-        // Try to see if it's *not* under Windows / Program Files
         try
         {
-            string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows) ?? "";
-            string pf     = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? "";
-            string pf86   = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) ?? "";
-
-            bool inWindows =
-                !string.IsNullOrWhiteSpace(winDir) &&
-                lower.StartsWith(winDir.ToLowerInvariant());
-
-            bool inProgramFiles =
-                (!string.IsNullOrWhiteSpace(pf)   && lower.StartsWith(pf.ToLowerInvariant()))  ||
-                (!string.IsNullOrWhiteSpace(pf86) && lower.StartsWith(pf86.ToLowerInvariant()));
-
-            if (!inWindows && !inProgramFiles)
-                flags.Add("non-standard path");
-        }
-        catch
-        {
-            // If anything explodes here, still keep whatever flags we already have.
-        }
-
-        if (flags.Count == 0)
-            return "OK – likely benign (standard location)";
-
-        return "CHECK – " + string.Join(", ", flags);
-    }
-
-
-    // ---- Investigation integration (services / regedit / explorer) ----
-
-    private void PersistOpenSelectedButton_OnClick(object? sender, RoutedEventArgs e)
-    {
-        OpenPersistEntry(PersistResultsList?.SelectedItem as string);
-    }
-
-    private void PersistResultsList_OnDoubleTapped(object? sender, RoutedEventArgs e)
-    {
-        OpenPersistEntry(PersistResultsList?.SelectedItem as string);
-    }
-
-    private void OpenPersistEntry(string? entry)
-    {
-        if (string.IsNullOrWhiteSpace(entry))
-        {
-            if (PersistStatusText != null)
-                PersistStatusText.Text = "Status: select an entry first.";
-            return;
-        }
-
-        var lines = entry.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length == 0)
-            return;
-
-        string headerLine = lines[0].Trim();
-
-        // -------------------------
-        // 1) Service entries → Services.msc
-        // -------------------------
-        if (headerLine.StartsWith("[Service]", StringComparison.OrdinalIgnoreCase))
-        {
-            // Internal service name, e.g. "MDCoreSvc"
-            string serviceName = headerLine.Substring("[Service]".Length).Trim();
-
-            // Try to pull the DisplayName so you can search by the friendly name
-            string displayName = serviceName;
-            var displayLine = lines.FirstOrDefault(l =>
-                l.TrimStart().StartsWith("Display:", StringComparison.OrdinalIgnoreCase));
-
-            if (displayLine != null)
-            {
-                int colon = displayLine.IndexOf(':');
-                if (colon >= 0 && colon + 1 < displayLine.Length)
-                {
-                    displayName = displayLine.Substring(colon + 1).Trim();
-                }
-            }
-
-            try
+            // Registry-backed entry → open regedit
+            if (item.LocationType.StartsWith("Autorun (Registry)", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(item.RegistryPath))
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName      = "services.msc",
+                    FileName        = "regedit.exe",
                     UseShellExecute = true
                 });
 
                 if (PersistStatusText != null)
-                {
-                    PersistStatusText.Text =
-                        $"Status: opened Services.msc – look for display name '{displayName}' (service name: {serviceName}).";
-                }
+                    PersistStatusText.Text = $"Status: opened Regedit – navigate to {item.RegistryPath}.";
 
-                LogCaseAndRefresh(
-                    tab: "Persist",
-                    action: "Opened Services.msc for service",
-                    severity: "NOTE",
-                    target: serviceName,
-                    details: $"Display name: {displayName}");
-
-            }
-            catch
-            {
-                if (PersistStatusText != null)
-                    PersistStatusText.Text = "Status: could not launch Services.msc.";
-            }
-
-            return;
-        }
-
-        // -------------------------
-        // 2) Run / RunOnce autoruns → Regedit
-        //    Header line looks like:
-        //    [Run] HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
-        // -------------------------
-        if (headerLine.StartsWith("[Run]", StringComparison.OrdinalIgnoreCase))
-        {
-            string regPath = headerLine.Substring("[Run]".Length).Trim();
-
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName      = "regedit.exe",
-                    UseShellExecute = true
-                });
-
-                if (PersistStatusText != null)
-                    PersistStatusText.Text =
-                        $"Status: opened Regedit – navigate to {regPath} to inspect this autorun.";
-
-                LogCaseAndRefresh(
-                    tab: "Persist",
-                    action: "Opened Regedit for autorun key",
-                    severity: "NOTE",
-                    target: regPath,
-                    details: "Technician reviewing autorun entry in registry.");
-
-            }
-            catch
-            {
-                if (PersistStatusText != null)
-                    PersistStatusText.Text =
-                        $"Status: autorun at {regPath} (failed to open Regedit automatically).";
-            }
-
-            return;
-        }
-
-        // -------------------------
-        // 3) Startup entries → open the .lnk/.exe in Explorer using the Path: line
-        // -------------------------
-        if (headerLine.StartsWith("[Startup]", StringComparison.OrdinalIgnoreCase))
-        {
-            var pathLine = lines.FirstOrDefault(l =>
-                l.TrimStart().StartsWith("Path:", StringComparison.OrdinalIgnoreCase));
-
-            if (pathLine == null)
-            {
-                if (PersistStatusText != null)
-                    PersistStatusText.Text = "Status: startup entry has no Path: line.";
                 return;
             }
 
-            int colon = pathLine.IndexOf(':');
-            if (colon < 0 || colon + 1 >= pathLine.Length)
-                return;
-
-            // Take everything after "Path:" and trim it
-            string startupPath = pathLine.Substring(colon + 1).Trim();
-
-            if (!File.Exists(startupPath))
+            // File-backed entry → open Explorer at path/parent
+            if (!string.IsNullOrWhiteSpace(item.Path))
             {
-                if (PersistStatusText != null)
-                    PersistStatusText.Text = $"Status: startup item not found on disk: {startupPath}";
+                string path = item.Path;
 
-                LogCaseAndRefresh(
-                    tab: "Persist",
-                    action: "Startup entry missing on disk",
-                    severity: "WARN",
-                    target: startupPath,
-                    details: "Listed startup entry could not be found on disk.");
-            }
-                else
+                if (File.Exists(path))
                 {
-                    try
+                    Process.Start(new ProcessStartInfo
                     {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName        = "explorer.exe",
-                            Arguments       = $"/select,\"{startupPath}\"",
-                            UseShellExecute = true
-                        });
+                        FileName        = "explorer.exe",
+                        Arguments       = $"/select,\"{path}\"",
+                        UseShellExecute = true
+                    });
 
-                        if (PersistStatusText != null)
-                            PersistStatusText.Text = $"Status: opened Startup item in Explorer: {startupPath}.";
-
-                        LogCaseAndRefresh(
-                            tab: "Persist",
-                            action: "Opened startup item in Explorer",
-                            severity: "NOTE",
-                            target: startupPath,
-                            details: "Technician reviewing startup executable/shortcut.");
-                    }
-                    catch
-                    {
-                        if (PersistStatusText != null)
-                            PersistStatusText.Text = $"Status: could not open Startup item: {startupPath}.";
-                    }
+                    if (PersistStatusText != null)
+                        PersistStatusText.Text = $"Status: opened Explorer at {path}.";
                 }
+                else if (Directory.Exists(path))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName        = "explorer.exe",
+                        Arguments       = $"\"{path}\"",
+                        UseShellExecute = true
+                    });
 
-            return;
-        }
-
-        // -------------------------
-        // 4) Anything else with an Executable: line → Explorer
-        // -------------------------
-        var exeLine = lines.FirstOrDefault(l =>
-            l.TrimStart().StartsWith("Executable:", StringComparison.OrdinalIgnoreCase));
-
-        if (exeLine == null)
-        {
-            if (PersistStatusText != null)
-                PersistStatusText.Text = "Status: no executable path found for this entry.";
-            return;
-        }
-
-        int exeColon = exeLine.IndexOf(':');
-        if (exeColon < 0 || exeColon + 1 >= exeLine.Length)
-            return;
-
-        string rest = exeLine.Substring(exeColon + 1).Trim();
-
-        // Strip trailing " (exists)" / " (MISSING)" if present
-        int parenIndex = rest.LastIndexOf(" (", StringComparison.Ordinal);
-        if (parenIndex > 0)
-            rest = rest.Substring(0, parenIndex).Trim();
-
-        string exePath = rest;
-
-        if (!File.Exists(exePath))
-        {
-            if (PersistStatusText != null)
-                PersistStatusText.Text = $"Status: executable not found on disk: {exePath}";
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName      = "explorer.exe",
-                Arguments     = $"/select,\"{exePath}\"",
-                UseShellExecute = true
-            });
-
-            if (PersistStatusText != null)
-                PersistStatusText.Text = $"Status: opened Explorer at {exePath}.";
+                    if (PersistStatusText != null)
+                        PersistStatusText.Text = $"Status: opened Explorer at {path}.";
+                }
+            }
         }
         catch
         {
             if (PersistStatusText != null)
-                PersistStatusText.Text = "Status: failed to open Explorer for this entry.";
+                PersistStatusText.Text = "Status: failed to open location for this entry.";
+        }
+    }
+
+    // -----------------------------------------
+    // Utility helpers
+    // -----------------------------------------
+    private static string ExtractExecutablePath(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        string trimmed = input.Trim();
+
+        // Quotes around full path
+        if (trimmed.StartsWith("\""))
+        {
+            int secondQuote = trimmed.IndexOf('"', 1);
+            if (secondQuote > 1)
+                return trimmed.Substring(1, secondQuote - 1);
+        }
+
+        // First token until first space
+        int spaceIndex = trimmed.IndexOf(' ');
+        if (spaceIndex > 0)
+            return trimmed.Substring(0, spaceIndex);
+
+        return trimmed;
+    }
+
+    private static bool IsSuspiciousLocation(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return true;
+
+        string lower = path.ToLowerInvariant();
+
+        // User profile / AppData / Temp = more suspicious for autoruns
+        if (lower.Contains(@"\users\") ||
+            lower.Contains(@"\appdata\") ||
+            lower.Contains(@"\temp\"))
+        {
+            return true;
+        }
+
+        // If not under Windows or Program Files at all, treat as slightly odd
+        if (!lower.Contains(@":\windows") &&
+            !lower.Contains(@":\program files"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    // Simple model for persistence entries used by Persist tab
+    private sealed class PersistItem
+    {
+        public string Source { get; set; } = string.Empty;
+        public string LocationType { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string RegistryPath { get; set; } = string.Empty;
+        public string Risk { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public string MitreTechnique { get; set; } = string.Empty;
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            sb.Append('[').Append(LocationType).Append("] ");
+            sb.Append(Risk).Append(" – ").Append(Name);
+
+            if (!string.IsNullOrWhiteSpace(Source))
+                sb.Append("  (").Append(Source).Append(')');
+
+            sb.AppendLine();
+
+            if (!string.IsNullOrWhiteSpace(Path))
+                sb.AppendLine("  Path: " + Path);
+
+            if (!string.IsNullOrWhiteSpace(RegistryPath))
+                sb.AppendLine("  Registry: " + RegistryPath);
+
+            if (!string.IsNullOrWhiteSpace(Reason))
+                sb.AppendLine("  Reason: " + Reason);
+
+            if (!string.IsNullOrWhiteSpace(MitreTechnique))
+                sb.AppendLine("  MITRE: " + MitreTechnique);
+
+            return sb.ToString().TrimEnd();
         }
     }
 }
-

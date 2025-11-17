@@ -144,5 +144,34 @@ public partial class MainWindow
         }
     }
 
+        // Utility: build a simple risk label for service/driver binaries
+    private static string BuildRiskLabel(string? path, bool existsOnDisk)
+    {
+        // If the binary path is empty or missing, that’s suspicious
+        if (!existsOnDisk || string.IsNullOrWhiteSpace(path))
+            return "CHECK – binary missing on disk";
+
+        string lower = path.ToLowerInvariant();
+
+        // User/AppData/Temp paths are higher risk for autoruns/services
+        if (lower.Contains(@"\users\") ||
+            lower.Contains(@"\appdata\") ||
+            lower.Contains(@"\temp\"))
+        {
+            return "CHECK – unusual location";
+        }
+
+        // Anything not under Windows or Program Files is a bit odd
+        if (!lower.Contains(@":\windows") &&
+            !lower.Contains(@":\program files"))
+        {
+            return "CHECK – outside standard program locations";
+        }
+
+        // Otherwise treat as normal for v1
+        return "OK";
+    }
+
 #pragma warning restore CA1416
 }
+
