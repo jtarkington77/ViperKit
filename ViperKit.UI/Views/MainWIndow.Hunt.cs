@@ -502,7 +502,6 @@ public partial class MainWindow
         HuntResultsText.Text = sb.ToString();
     }
 
-
     // ---- Registry hunt ----
     private void HandleRegistryHunt(string regPath)
     {
@@ -511,7 +510,24 @@ public partial class MainWindow
         {
             if (string.IsNullOrWhiteSpace(regPath))
             {
-                HuntResultsText.Text = "Registry path was empty.";
+                if (HuntResultsText != null)
+                    HuntResultsText.Text = "Registry path was empty.";
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Registry",
+                    Target   = "(empty)",
+                    Severity = "WARN",
+                    Summary  = "Registry path was empty",
+                    Details  = "Provide a full path like HKLM\\Path\\To\\Key."
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
@@ -520,9 +536,28 @@ public partial class MainWindow
             int firstSlash = cleaned.IndexOf('\\');
             if (firstSlash <= 0)
             {
-                HuntResultsText.Text =
-                    $"Could not parse registry path:\n  {cleaned}\n\n" +
-                    "Expected format: HKLM\\Path\\To\\Key";
+                if (HuntResultsText != null)
+                {
+                    HuntResultsText.Text =
+                        $"Could not parse registry path:\n  {cleaned}\n\n" +
+                        "Expected format: HKLM\\Path\\To\\Key";
+                }
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Registry",
+                    Target   = cleaned,
+                    Severity = "WARN",
+                    Summary  = "Could not parse registry path",
+                    Details  = "Expected format: HKLM\\Path\\To\\Key"
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
@@ -541,17 +576,57 @@ public partial class MainWindow
 
             if (root == null)
             {
-                HuntResultsText.Text =
-                    $"Unknown registry hive in path:\n  {cleaned}\n\n" +
-                    "Supported hives: HKLM, HKCU, HKCR, HKU, HKCC.";
+                if (HuntResultsText != null)
+                {
+                    HuntResultsText.Text =
+                        $"Unknown registry hive in path:\n  {cleaned}\n\n" +
+                        "Supported hives: HKLM, HKCU, HKCR, HKU, HKCC.";
+                }
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Registry",
+                    Target   = cleaned,
+                    Severity = "WARN",
+                    Summary  = "Unknown registry hive",
+                    Details  = "Supported hives: HKLM, HKCU, HKCR, HKU, HKCC."
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
             using var key = root.OpenSubKey(subKeyPath);
+            string fullPath = $"{hivePart}\\{subKeyPath}";
+
             if (key == null)
             {
-                HuntResultsText.Text =
-                    $"Registry key not found:\n  {hivePart}\\{subKeyPath}";
+                if (HuntResultsText != null)
+                {
+                    HuntResultsText.Text =
+                        $"Registry key not found:\n  {fullPath}";
+                }
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Registry",
+                    Target   = fullPath,
+                    Severity = "WARN",
+                    Summary  = "Registry key not found",
+                    Details  = "Verify the path is correct and accessible."
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
@@ -575,7 +650,7 @@ public partial class MainWindow
 
             var sb = new StringBuilder();
             sb.AppendLine("Registry key found:");
-            sb.AppendLine($"  Path: {hivePart}\\{subKeyPath}");
+            sb.AppendLine($"  Path: {fullPath}");
             sb.AppendLine($"  Subkeys: {subKeys.Length}");
             sb.AppendLine($"  Values: {valueLines.Count}");
             sb.AppendLine();
@@ -590,15 +665,61 @@ public partial class MainWindow
                     sb.AppendLine(line);
             }
 
-            HuntResultsText.Text = sb.ToString();
+            if (HuntResultsText != null)
+                HuntResultsText.Text = sb.ToString();
+
+            // Bump severity if this looks like a common autorun / persistence area
+            string severity = "INFO";
+            string subKeyUpper = subKeyPath.ToUpperInvariant();
+
+            if (subKeyUpper.Contains(@"\CURRENTVERSION\RUN") ||
+                subKeyUpper.Contains(@"\CURRENTVERSION\RUNONCE") ||
+                subKeyUpper.Contains(@"\SERVICES\"))
+            {
+                severity = "WARN";
+            }
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "Registry",
+                Target   = fullPath,
+                Severity = severity,
+                Summary  = "Registry key found",
+                Details  = $"Subkeys: {subKeys.Length}, Values: {valueLines.Count}"
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
         }
         catch (Exception ex)
         {
-            HuntResultsText.Text =
-                $"Error while reading registry key:\n  {ex.Message}";
+            if (HuntResultsText != null)
+            {
+                HuntResultsText.Text =
+                    $"Error while reading registry key:\n  {ex.Message}";
+            }
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "Registry",
+                Target   = regPath,
+                Severity = "WARN",
+                Summary  = "Error while reading registry key",
+                Details  = ex.Message
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
         }
 #pragma warning restore CA1416
     }
+
 
     // ---- Hash hunt (with optional disk sweep) ----
     private void HandleHashHunt(string hash)
@@ -862,7 +983,7 @@ public partial class MainWindow
         return HuntResultsList?.SelectedItem as HuntResult;
     }
 
-    private void HuntOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
+   private void HuntOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var selected = GetSelectedHuntResult();
         if (selected == null || string.IsNullOrWhiteSpace(selected.Target))
@@ -870,6 +991,25 @@ public partial class MainWindow
 
         try
         {
+            // If this is a registry result, open Regedit
+            if (string.Equals(selected.Category, "Registry", StringComparison.OrdinalIgnoreCase) ||
+                selected.Target.StartsWith("HK", StringComparison.OrdinalIgnoreCase))
+            {
+    #pragma warning disable CA1416 // Windows-only
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName        = "regedit.exe",
+                    UseShellExecute = true
+                });
+    #pragma warning restore CA1416
+
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = $"Status: opened Regedit – navigate to {selected.Target}.";
+
+                return;
+            }
+
+            // Otherwise treat as file/folder path
             if (File.Exists(selected.Target))
             {
                 Process.Start(new ProcessStartInfo
@@ -891,7 +1031,7 @@ public partial class MainWindow
         }
         catch
         {
-            // Don't crash if Explorer can't open
+            // Don't crash if Explorer / Regedit can't open
         }
     }
 
