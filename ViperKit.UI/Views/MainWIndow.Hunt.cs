@@ -355,9 +355,28 @@ public partial class MainWindow
     {
         if (!IPAddress.TryParse(input.Trim(), out var ip))
         {
-            HuntResultsText.Text =
-                $"\"{input}\" does not look like a valid IP address.\n" +
-                "Example: 1.2.3.4";
+            if (HuntResultsText != null)
+            {
+                HuntResultsText.Text =
+                    $"\"{input}\" does not look like a valid IP address.\n" +
+                    "Example: 1.2.3.4";
+            }
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "IP",
+                Target   = input,
+                Severity = "WARN",
+                Summary  = "Invalid IP address format",
+                Details  = "Example: 1.2.3.4"
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
+
             return;
         }
 
@@ -366,12 +385,14 @@ public partial class MainWindow
         sb.AppendLine($"Family: {ip.AddressFamily}");
 
         // Reverse DNS
+        string reverseDnsSummary;
         try
         {
             var hostEntry = Dns.GetHostEntry(ip);
             if (hostEntry.Aliases.Length == 0 && string.IsNullOrWhiteSpace(hostEntry.HostName))
             {
                 sb.AppendLine("Reverse DNS: (no hostnames returned)");
+                reverseDnsSummary = "Reverse DNS: (no hostnames)";
             }
             else
             {
@@ -381,14 +402,20 @@ public partial class MainWindow
 
                 foreach (var alias in hostEntry.Aliases)
                     sb.AppendLine($"  Alias:   {alias}");
+
+                reverseDnsSummary = string.IsNullOrWhiteSpace(hostEntry.HostName)
+                    ? "Reverse DNS: aliases returned"
+                    : $"Reverse DNS: {hostEntry.HostName}";
             }
         }
         catch (Exception ex)
         {
             sb.AppendLine($"Reverse DNS: error – {ex.Message}");
+            reverseDnsSummary = "Reverse DNS lookup error";
         }
 
         // Reachability ping
+        string pingSummary;
         try
         {
             using var ping = new Ping();
@@ -399,19 +426,45 @@ public partial class MainWindow
             sb.AppendLine($"  Status: {reply.Status}");
 
             if (reply.Status == IPStatus.Success)
+            {
                 sb.AppendLine($"  Roundtrip: {reply.RoundtripTime} ms");
+                pingSummary = $"Ping: {reply.Status}, {reply.RoundtripTime} ms";
+            }
+            else
+            {
+                pingSummary = $"Ping: {reply.Status}";
+            }
         }
         catch (Exception ex)
         {
             sb.AppendLine();
             sb.AppendLine($"Ping test: error – {ex.Message}");
+            pingSummary = "Ping error";
         }
 
         sb.AppendLine();
         sb.AppendLine("Future builds: correlate IP against threat intel feeds, geo, ASN, etc.");
 
-        HuntResultsText.Text = sb.ToString();
+        if (HuntResultsText != null)
+            HuntResultsText.Text = sb.ToString();
+
+        // Structured result row
+        _huntResults.Add(new HuntResult
+        {
+            Category = "IP",
+            Target   = ip.ToString(),
+            Severity = "INFO",
+            Summary  = "IP IOC checked",
+            Details  = $"{reverseDnsSummary}; {pingSummary}"
+        });
+
+        if (HuntResultsList != null)
+        {
+            HuntResultsList.ItemsSource = null;
+            HuntResultsList.ItemsSource = _huntResults.ToArray();
+        }
     }
+
 
     // ---- Domain / URL hunt ----
     private async void HandleDomainHunt(string ioc)
@@ -433,7 +486,24 @@ public partial class MainWindow
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            HuntResultsText.Text = $"Could not parse host from: \"{original}\"";
+            if (HuntResultsText != null)
+                HuntResultsText.Text = $"Could not parse host from: \"{original}\"";
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "Domain",
+                Target   = original,
+                Severity = "WARN",
+                Summary  = "Could not parse host from IOC",
+                Details  = "Try a plain domain like example.com or a full URL."
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
+
             return;
         }
 
@@ -443,6 +513,7 @@ public partial class MainWindow
         sb.AppendLine();
 
         // --- DNS resolution ---
+        string dnsSummary;
         try
         {
             var addresses = Dns.GetHostAddresses(host);
@@ -450,17 +521,21 @@ public partial class MainWindow
             if (addresses.Length == 0)
             {
                 sb.AppendLine("DNS: no addresses returned.");
+                dnsSummary = "DNS: no addresses returned";
             }
             else
             {
                 sb.AppendLine("DNS addresses:");
                 foreach (var addr in addresses)
                     sb.AppendLine($"  {addr} ({addr.AddressFamily})");
+
+                dnsSummary = $"DNS: {addresses.Length} address(es)";
             }
         }
         catch (Exception ex)
         {
             sb.AppendLine($"DNS lookup error: {ex.Message}");
+            dnsSummary = "DNS lookup error";
         }
 
         sb.AppendLine();
@@ -474,6 +549,7 @@ public partial class MainWindow
             urlToCheck = "http://" + host;
         }
 
+        string httpSummary;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Head, urlToCheck);
@@ -493,14 +569,35 @@ public partial class MainWindow
             {
                 sb.AppendLine($"  Content-Type: {response.Content.Headers.ContentType}");
             }
+
+            httpSummary = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
         }
         catch (Exception ex)
         {
             sb.AppendLine($"  Error making HTTP request: {ex.Message}");
+            httpSummary = "HTTP probe error";
         }
 
-        HuntResultsText.Text = sb.ToString();
+        if (HuntResultsText != null)
+            HuntResultsText.Text = sb.ToString();
+
+        // Structured result
+        _huntResults.Add(new HuntResult
+        {
+            Category = "Domain",
+            Target   = host,
+            Severity = "INFO",
+            Summary  = "Domain/URL IOC checked",
+            Details  = $"{dnsSummary}; {httpSummary}"
+        });
+
+        if (HuntResultsList != null)
+        {
+            HuntResultsList.ItemsSource = null;
+            HuntResultsList.ItemsSource = _huntResults.ToArray();
+        }
     }
+
 
     // ---- Registry hunt ----
     private void HandleRegistryHunt(string regPath)
@@ -745,7 +842,7 @@ public partial class MainWindow
                 break;
             case 40:
                 kind        = "SHA-1 (40 hex chars)";
-                canScanDisk = false; 
+                canScanDisk = false; // we won't scan disk on SHA-1 for now
                 break;
             case 64:
                 kind        = "SHA-256 (64 hex chars)";
@@ -777,16 +874,35 @@ public partial class MainWindow
         string? scopeFolder = HuntScopeFolderInput?.Text?.Trim();
         if (canScanDisk && !string.IsNullOrWhiteSpace(scopeFolder) && Directory.Exists(scopeFolder))
         {
+            const int MaxFilesToScan = 3000; // safety rail so we don't freeze on huge trees
+
             sb.AppendLine($"Disk scan scope: {scopeFolder}");
+            sb.AppendLine($"Max files to scan this run: {MaxFilesToScan}");
             sb.AppendLine();
 
-            int matchCount = 0;
+            int matchCount   = 0;
+            int filesScanned = 0;
+            bool limitHit    = false;
+
             var matches = new List<string>();
 
             try
             {
-                foreach (var file in Directory.EnumerateFiles(scopeFolder, "*", SearchOption.AllDirectories))
+                // status line while we work
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = "Status: disk scan running...";
+
+                foreach (var file in EnumerateFilesSafe(scopeFolder))
                 {
+                    // Respect file scan limit
+                    if (filesScanned >= MaxFilesToScan)
+                    {
+                        limitHit = true;
+                        break;
+                    }
+
+                    filesScanned++;
+
                     try
                     {
                         using var stream = File.OpenRead(file);
@@ -829,23 +945,49 @@ public partial class MainWindow
 
                 if (matchCount == 0)
                 {
-                    sb.AppendLine("Disk scan: no matching files found under scope.");
+                    sb.AppendLine($"Disk scan: no matching files found under scope. Files scanned: {filesScanned}.");
+
+                    if (limitHit)
+                        sb.AppendLine("Note: scan stopped early after hitting the safety file limit.");
+
+                    sb.AppendLine("Note: some system-protected folders may have been skipped if access was denied.");
 
                     _huntResults.Add(new HuntResult
                     {
                         Category = "HashScan",
                         Target   = scopeFolder,
                         Severity = "INFO",
-                        Summary  = "Disk scan completed",
-                        Details  = "No matching files found under scope."
+                        Summary  = "Disk scan completed – no matches",
+                        Details  = limitHit
+                            ? $"Files scanned: {filesScanned} (safety limit hit). Protected folders may have been skipped."
+                            : $"Files scanned: {filesScanned}. Protected folders may have been skipped."
                     });
                 }
                 else
                 {
-                    sb.AppendLine($"Disk scan: {matchCount} matching file(s) found:");
+                    sb.AppendLine($"Disk scan: {matchCount} matching file(s) found. Files scanned: {filesScanned}.");
                     foreach (var m in matches)
                         sb.AppendLine($"  {m}");
+
+                    if (limitHit)
+                        sb.AppendLine("Note: scan stopped early after hitting the safety file limit.");
+
+                    sb.AppendLine("Note: some system-protected folders may have been skipped if access was denied.");
+
+                    _huntResults.Add(new HuntResult
+                    {
+                        Category = "HashScan",
+                        Target   = scopeFolder,
+                        Severity = "WARN",
+                        Summary  = $"Disk scan completed – {matchCount} match(es)",
+                        Details  = limitHit
+                            ? $"Files scanned: {filesScanned} (safety limit hit). Protected folders may have been skipped."
+                            : $"Files scanned: {filesScanned}. Protected folders may have been skipped."
+                    });
                 }
+
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = "Status: disk scan completed.";
             }
             catch (Exception ex)
             {
@@ -859,6 +1001,9 @@ public partial class MainWindow
                     Summary  = "Disk scan error",
                     Details  = ex.Message
                 });
+
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = "Status: disk scan error.";
             }
         }
         else
@@ -894,7 +1039,7 @@ public partial class MainWindow
             HuntResultsList.ItemsSource = _huntResults.ToArray();
         }
 
-        // Log to Hashes.log
+        // Log to Hashes.log as before
         LogHashObserved(normalized, kind);
     }
 
@@ -983,7 +1128,7 @@ public partial class MainWindow
         return HuntResultsList?.SelectedItem as HuntResult;
     }
 
-   private void HuntOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
+    private void HuntOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var selected = GetSelectedHuntResult();
         if (selected == null || string.IsNullOrWhiteSpace(selected.Target))
@@ -991,47 +1136,114 @@ public partial class MainWindow
 
         try
         {
-            // If this is a registry result, open Regedit
-            if (string.Equals(selected.Category, "Registry", StringComparison.OrdinalIgnoreCase) ||
-                selected.Target.StartsWith("HK", StringComparison.OrdinalIgnoreCase))
+            var category = selected.Category ?? string.Empty;
+            var target   = selected.Target.Trim();
+
+            // 1) Registry result → open Regedit
+            if (category.Equals("Registry", StringComparison.OrdinalIgnoreCase) ||
+                target.StartsWith("HK", StringComparison.OrdinalIgnoreCase))
             {
-    #pragma warning disable CA1416 // Windows-only
                 Process.Start(new ProcessStartInfo
                 {
                     FileName        = "regedit.exe",
                     UseShellExecute = true
                 });
-    #pragma warning restore CA1416
 
                 if (HuntStatusText != null)
-                    HuntStatusText.Text = $"Status: opened Regedit – navigate to {selected.Target}.";
+                    HuntStatusText.Text = $"Status: opened Regedit – navigate to {target}.";
 
                 return;
             }
 
-            // Otherwise treat as file/folder path
-            if (File.Exists(selected.Target))
+            // 2) Domain / URL result → open default browser
+            if (category.Equals("Domain", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(target))
+                {
+                    var url = (target.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                            target.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                            ? target
+                            : "https://" + target;
+
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName        = url,
+                        UseShellExecute = true
+                    });
+
+                    if (HuntStatusText != null)
+                        HuntStatusText.Text = $"Status: opened {url} in default browser.";
+                }
+
+                return;
+            }
+
+            // 3) Everything else: treat as file/folder path
+            if (File.Exists(target))
             {
                 Process.Start(new ProcessStartInfo
                 {
                     FileName        = "explorer.exe",
-                    Arguments       = $"/select,\"{selected.Target}\"",
+                    Arguments       = $"/select,\"{target}\"",
                     UseShellExecute = true
                 });
             }
-            else if (Directory.Exists(selected.Target))
+            else if (Directory.Exists(target))
             {
                 Process.Start(new ProcessStartInfo
                 {
                     FileName        = "explorer.exe",
-                    Arguments       = $"\"{selected.Target}\"",
+                    Arguments       = $"\"{target}\"",
                     UseShellExecute = true
                 });
             }
         }
         catch
         {
-            // Don't crash if Explorer / Regedit can't open
+            // Don't crash if Explorer / Regedit / browser can't open
+        }
+    }
+
+    /// <summary>
+    /// Safely enumerates all files under a root folder.
+    /// Skips directories that throw access/IO errors instead of aborting the whole scan.
+    /// </summary>
+    private static IEnumerable<string> EnumerateFilesSafe(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            var currentDir = pending.Pop();
+
+            // Get files in this directory
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(currentDir);
+            }
+            catch
+            {
+                continue; // can't read this directory
+            }
+
+            foreach (var file in files)
+                yield return file;
+
+            // Queue subdirectories
+            string[] subDirs;
+            try
+            {
+                subDirs = Directory.GetDirectories(currentDir);
+            }
+            catch
+            {
+                continue; // can't list subdirs here
+            }
+
+            foreach (var sub in subDirs)
+                pending.Push(sub);
         }
     }
 
