@@ -5,6 +5,7 @@ using System.Text;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Security.Cryptography;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
@@ -22,6 +23,8 @@ public partial class MainWindow
     {
         Timeout = TimeSpan.FromSeconds(3)
     };
+    private readonly List<HuntResult> _huntResults = new();
+
 
     // =========================
     // HUNT TAB
@@ -33,20 +36,30 @@ public partial class MainWindow
 
         if (string.IsNullOrWhiteSpace(iocText))
         {
-            HuntStatusText.Text  = "Status: no IOC provided.";
-            HuntResultsText.Text = "Enter an IOC above and click Run Hunt to simulate a search.";
+            if (HuntStatusText != null)
+                HuntStatusText.Text = "Status: no IOC provided.";
+
+            if (HuntResultsText != null)
+                HuntResultsText.Text = "Enter an IOC above and click Run Hunt to search.";
+
             return;
         }
+
+        // Clear previous structured results
+        _huntResults.Clear();
+        if (HuntResultsList != null)
+            HuntResultsList.ItemsSource = null;
 
         // Figure out selected type
         var selectedIndex = HuntIocType?.SelectedIndex ?? 0;
         var effectiveType = DetermineIocType(iocText, selectedIndex);
 
-        // Log the action
+        // Log the action (file, json, case)
         LogHuntAction(iocText, effectiveType);
 
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        HuntStatusText.Text = $"Status:  {effectiveType} hunt executed at {timestamp}.";
+        if (HuntStatusText != null)
+            HuntStatusText.Text = $"Status: {effectiveType} hunt executed at {timestamp}.";
 
         switch (effectiveType)
         {
@@ -71,12 +84,17 @@ public partial class MainWindow
                 break;
 
             default:
-                HuntResultsText.Text =
-                    $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
-                    "This IOC type is not wired yet.";
+                if (HuntResultsText != null)
+                {
+                    HuntResultsText.Text =
+                        $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
+                        "This IOC type is not wired yet.";
+                }
                 break;
+        }
 
-            try
+        // Keep dashboard + case tab in sync
+        try
         {
             UpdateDashboardCaseSummary();
             RefreshCaseTab();
@@ -85,9 +103,8 @@ public partial class MainWindow
         {
             // Never let UI updates crash the hunt
         }
-
-        }
     }
+
 
     private static string DetermineIocType(string ioc, int selectedIndex)
     {
@@ -181,12 +198,32 @@ public partial class MainWindow
                     totalSize += file.Length;
                 }
 
-                HuntResultsText.Text =
+                var text =
                     $"Folder found:\n" +
                     $"  Path: {dirInfo.FullName}\n" +
                     $"  Files: {fileCount}\n" +
                     $"  Approx. size: {totalSize} bytes\n\n" +
                     "Future builds: walk this tree for artifacts, suspicious names, etc.";
+
+                if (HuntResultsText != null)
+                    HuntResultsText.Text = text;
+
+                // Add structured result
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Folder",
+                    Target   = dirInfo.FullName,
+                    Severity = "INFO",
+                    Summary  = "Folder IOC checked",
+                    Details  = $"Files: {fileCount}, Approx. size: {totalSize} bytes"
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
@@ -241,23 +278,77 @@ public partial class MainWindow
                 sb.AppendLine($"  MD5:      {md5Hex}");
                 sb.AppendLine($"  SHA-256:  {sha256Hex}");
 
-                HuntResultsText.Text = sb.ToString();
+                if (HuntResultsText != null)
+                    HuntResultsText.Text = sb.ToString();
+
+                // Add structured result
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "File",
+                    Target   = info.FullName,
+                    Severity = "INFO",
+                    Summary  = "File IOC checked",
+                    Details  = $"Size: {info.Length} bytes; MD5: {md5Hex}; SHA-256: {sha256Hex}"
+                });
+
+                if (HuntResultsList != null)
+                {
+                    HuntResultsList.ItemsSource = null;
+                    HuntResultsList.ItemsSource = _huntResults.ToArray();
+                }
+
                 return;
             }
 
-
             // Neither file nor directory exists
-            HuntResultsText.Text =
-                $"File or folder not found at:\n  {path}\n\n" +
-                "Verify the path is correct and accessible from this machine.";
+            if (HuntResultsText != null)
+            {
+                HuntResultsText.Text =
+                    $"File or folder not found at:\n  {path}\n\n" +
+                    "Verify the path is correct and accessible from this machine.";
+            }
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "File",
+                Target   = path,
+                Severity = "WARN",
+                Summary  = "Path not found",
+                Details  = "Verify the path is correct and accessible from this machine."
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
         }
         catch (Exception ex)
         {
-            HuntResultsText.Text =
-                $"Error while checking path:\n  {ex.Message}\n\n" +
-                "Make sure you have permission to access this path.";
+            if (HuntResultsText != null)
+            {
+                HuntResultsText.Text =
+                    $"Error while checking path:\n  {ex.Message}\n\n" +
+                    "Make sure you have permission to access this path.";
+            }
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "File",
+                Target   = path,
+                Severity = "WARN",
+                Summary  = "Error while checking path",
+                Details  = ex.Message
+            });
+
+            if (HuntResultsList != null)
+            {
+                HuntResultsList.ItemsSource = null;
+                HuntResultsList.ItemsSource = _huntResults.ToArray();
+            }
         }
     }
+
 
     // ---- IP hunt ----
     private void HandleIpHunt(string input)
@@ -705,6 +796,67 @@ public partial class MainWindow
             HuntStatusText.Text = $"Status: error saving snapshot – {ex.Message}";
         }
     }
+
+     private HuntResult? GetSelectedHuntResult()
+    {
+        return HuntResultsList?.SelectedItem as HuntResult;
+    }
+
+    private void HuntOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var selected = GetSelectedHuntResult();
+        if (selected == null || string.IsNullOrWhiteSpace(selected.Target))
+            return;
+
+        try
+        {
+            if (File.Exists(selected.Target))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName        = "explorer.exe",
+                    Arguments       = $"/select,\"{selected.Target}\"",
+                    UseShellExecute = true
+                });
+            }
+            else if (Directory.Exists(selected.Target))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName        = "explorer.exe",
+                    Arguments       = $"\"{selected.Target}\"",
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch
+        {
+            // Don't crash if Explorer can't open
+        }
+    }
+
+    private async void HuntCopyTargetButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var selected = GetSelectedHuntResult();
+        if (selected == null || string.IsNullOrWhiteSpace(selected.Target))
+            return;
+
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.Clipboard is not null)
+            {
+                await topLevel.Clipboard.SetTextAsync(selected.Target);
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = "Status: target path copied to clipboard.";
+            }
+        }
+        catch
+        {
+            // Ignore clipboard errors
+        }
+    }
+
 
     private void HuntClearButton_OnClick(object? sender, RoutedEventArgs e)
     {
