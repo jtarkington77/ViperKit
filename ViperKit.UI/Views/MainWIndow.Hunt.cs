@@ -605,7 +605,8 @@ public partial class MainWindow
     {
         if (string.IsNullOrWhiteSpace(hash))
         {
-            HuntResultsText.Text = "Hash IOC was empty.";
+            if (HuntResultsText != null)
+                HuntResultsText.Text = "Hash IOC was empty.";
             return;
         }
 
@@ -623,7 +624,7 @@ public partial class MainWindow
                 break;
             case 40:
                 kind        = "SHA-1 (40 hex chars)";
-                canScanDisk = false; // we won't scan disk on SHA-1 for now
+                canScanDisk = false; 
                 break;
             case 64:
                 kind        = "SHA-256 (64 hex chars)";
@@ -640,6 +641,16 @@ public partial class MainWindow
         sb.AppendLine($"Normalized: {normalized}");
         sb.AppendLine($"Detected type: {kind}");
         sb.AppendLine();
+
+        // Always log the hash itself as a top-level result row
+        _huntResults.Add(new HuntResult
+        {
+            Category = "Hash",
+            Target   = normalized,
+            Severity = "INFO",
+            Summary  = $"Hash IOC ({kind})",
+            Details  = "Use disk scan scope to search for matching files."
+        });
 
         // Optional disk sweep if a scope folder is set
         string? scopeFolder = HuntScopeFolderInput?.Text?.Trim();
@@ -677,6 +688,16 @@ public partial class MainWindow
                         {
                             matchCount++;
                             matches.Add(file);
+
+                            // Add each hit as a result row
+                            _huntResults.Add(new HuntResult
+                            {
+                                Category = "HashHit",
+                                Target   = file,
+                                Severity = "WARN",
+                                Summary  = "File matches IOC hash",
+                                Details  = $"Scope: {scopeFolder}"
+                            });
                         }
                     }
                     catch
@@ -688,6 +709,15 @@ public partial class MainWindow
                 if (matchCount == 0)
                 {
                     sb.AppendLine("Disk scan: no matching files found under scope.");
+
+                    _huntResults.Add(new HuntResult
+                    {
+                        Category = "HashScan",
+                        Target   = scopeFolder,
+                        Severity = "INFO",
+                        Summary  = "Disk scan completed",
+                        Details  = "No matching files found under scope."
+                    });
                 }
                 else
                 {
@@ -699,6 +729,15 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 sb.AppendLine($"Disk scan error: {ex.Message}");
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "HashScan",
+                    Target   = scopeFolder,
+                    Severity = "WARN",
+                    Summary  = "Disk scan error",
+                    Details  = ex.Message
+                });
             }
         }
         else
@@ -708,15 +747,36 @@ public partial class MainWindow
                 sb.AppendLine("Reason: only MD5 (32 chars) and SHA-256 (64 chars) are supported for disk scanning right now.");
             else
                 sb.AppendLine("Reason: no valid scope folder set. Use the Scope folder row above to pick a directory.");
+
+            _huntResults.Add(new HuntResult
+            {
+                Category = "HashScan",
+                Target   = string.IsNullOrWhiteSpace(scopeFolder) ? "(no scope)" : scopeFolder,
+                Severity = "INFO",
+                Summary  = "Disk scan not run",
+                Details  = canScanDisk
+                    ? "No valid scope folder set."
+                    : "Hash type not supported for disk scan."
+            });
         }
 
         sb.AppendLine();
         sb.AppendLine("Future builds: pivot hash into VT/OSINT, correlate across hosts/files, etc.");
 
-        HuntResultsText.Text = sb.ToString();
+        if (HuntResultsText != null)
+            HuntResultsText.Text = sb.ToString();
 
+        // Refresh the Matches list with all rows we added
+        if (HuntResultsList != null)
+        {
+            HuntResultsList.ItemsSource = null;
+            HuntResultsList.ItemsSource = _huntResults.ToArray();
+        }
+
+        // Log to Hashes.log
         LogHashObserved(normalized, kind);
     }
+
 
     private void LogHashObserved(string normalizedHash, string kind)
     {
