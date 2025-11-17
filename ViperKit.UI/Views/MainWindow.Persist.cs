@@ -38,6 +38,10 @@ public partial class MainWindow
             // 2) Startup folders – per-user + all users
             CollectStartupFolderAutoruns();
 
+            // 3) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
+            CollectServiceAndDriverPersistence();
+
+
             // Count how many items are flagged as CHECK
             int flaggedCount = _persistItems.Count(p =>
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
@@ -332,6 +336,134 @@ public partial class MainWindow
         catch
         {
             // Ignore folder-level errors
+        }
+    }
+
+    /// <summary>
+    /// Enumerate Windows services and drivers from
+    /// HKLM\SYSTEM\CurrentControlSet\Services and add them as persistence entries.
+    /// </summary>
+    private void CollectServiceAndDriverPersistence()
+    {
+        try
+        {
+            using var servicesRoot = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services");
+            if (servicesRoot == null)
+                return;
+
+            foreach (var serviceName in servicesRoot.GetSubKeyNames())
+            {
+                using var svcKey = servicesRoot.OpenSubKey(serviceName);
+                if (svcKey == null)
+                    continue;
+
+                // --- Start type: only keep real persistence (Boot/System/Automatic) ---
+                int startRaw;
+                try
+                {
+                    startRaw = Convert.ToInt32(svcKey.GetValue("Start", 3));
+                }
+                catch
+                {
+                    startRaw = 3; // treat unknown as manual
+                }
+
+                if (startRaw > 2)
+                {
+                    // Skip Manual (3) and Disabled (4) – not true persistence for v1
+                    continue;
+                }
+
+                string startType = startRaw switch
+                {
+                    0 => "Boot",
+                    1 => "System",
+                    2 => "Automatic",
+                    _ => $"Start={startRaw}"
+                };
+
+                // --- Type: distinguish services vs drivers ---
+                int typeRaw;
+                try
+                {
+                    typeRaw = Convert.ToInt32(svcKey.GetValue("Type", 0));
+                }
+                catch
+                {
+                    typeRaw = 0;
+                }
+
+                // Very simple driver detection: type flags 1/2/4 are "driver-ish"
+                bool isDriver = (typeRaw & 0x00000001) != 0 ||
+                                (typeRaw & 0x00000002) != 0 ||
+                                (typeRaw & 0x00000004) != 0;
+
+                // --- ImagePath / binary location ---
+                string rawImagePath = svcKey.GetValue("ImagePath") as string ?? string.Empty;
+                string expandedPath = rawImagePath;
+
+                if (!string.IsNullOrWhiteSpace(expandedPath) && expandedPath.Contains('%'))
+                    expandedPath = Environment.ExpandEnvironmentVariables(expandedPath);
+
+                // Re-use the same helper used for Run keys to peel out the EXE path
+                string exePath       = ExtractExecutablePath(expandedPath);
+                bool   existsOnDisk  = !string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath);
+
+                // Risk heuristic: same flavor as Run/Startup
+                string risk;
+                if (!existsOnDisk || string.IsNullOrWhiteSpace(exePath))
+                {
+                    risk = "CHECK – binary missing on disk";
+                }
+                else if (IsSuspiciousLocation(exePath))
+                {
+                    risk = "CHECK – unusual location";
+                }
+                else
+                {
+                    risk = "OK";
+                }
+
+                // MITRE mapping: Windows service vs driver persistence
+                string mitreId = isDriver ? "T1547.006" : "T1543.003";
+
+                // Friendly display name (what techs see in services.msc)
+                string displayName = svcKey.GetValue("DisplayName") as string ?? serviceName;
+
+                var reasonBuilder = new StringBuilder();
+                reasonBuilder.Append($"Start type: {startType}. ");
+
+                if (string.IsNullOrWhiteSpace(rawImagePath))
+                {
+                    reasonBuilder.Append("No ImagePath set (may be driverless or misconfigured).");
+                }
+                else
+                {
+                    reasonBuilder.Append($"ImagePath: {rawImagePath}");
+                    if (!string.Equals(rawImagePath, exePath, StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(exePath))
+                    {
+                        reasonBuilder.Append($" (resolved: {exePath})");
+                    }
+                    reasonBuilder.Append('.');
+                }
+
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = "Services/Drivers",
+                    LocationType   = isDriver ? "Driver" : "Service",
+                    Name           = displayName,
+                    Path           = exePath,
+                    RegistryPath   = svcKey.Name,
+                    Risk           = risk,
+                    Reason         = reasonBuilder.ToString(),
+                    MitreTechnique = mitreId
+                });
+            }
+        }
+        catch
+        {
+            // In v1 we silently skip a full failure here; Run/Startup still show up.
         }
     }
 
