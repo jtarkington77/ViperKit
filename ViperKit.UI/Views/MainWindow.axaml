@@ -293,71 +293,196 @@
 
                 <!-- PERSIST -->
                 <TabItem Header="Persist">
-                  <Border Background="#0B1518" Padding="16">
-                    <StackPanel Spacing="12">
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                      <TextBlock Text="Persistence Map"
-                                FontSize="20"
-                                FontWeight="SemiBold"
-                                Foreground="#EAF7F7" />
+                    <!-- Header / Run -->
+                    <StackPanel Grid.Row="0"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="Persistence map"
+                                  FontSize="16"
+                                  FontWeight="Bold"
+                                  Margin="0,0,8,0" />
 
-                      <TextBlock Text="Map common persistence: Run / RunOnce autoruns, Startup folders, and automatic services. Entries with RISK: CHECK are worth a closer look."
-                                FontSize="13"
-                                Foreground="#C7D4D4"
-                                TextWrapping="Wrap" />
+                        <Button x:Name="PersistRunButton"
+                                Content="Run persistence scan"
+                                Click="PersistRunButton_OnClick"
+                                MinWidth="180"
+                                Margin="0,0,8,0" />
 
-                      <Button x:Name="PersistRunButton"
-                              Content="Enumerate Persistence"
-                              Width="170"
-                              HorizontalAlignment="Left"
-                              Click="PersistRunButton_OnClick" />
-
-                      <TextBlock x:Name="PersistStatusText"
-                                Text="Status: idle."
-                                FontSize="12"
-                                Foreground="#8FA9AA"
-                                Margin="0,4,0,0" />
-
-                      <!-- Controls for triage -->
-                      <StackPanel Orientation="Horizontal"
-                                  Spacing="12"
-                                  Margin="0,4,0,0">
-                        <CheckBox x:Name="PersistShowCheckOnlyCheckBox"
-                                  Content="Show only 'CHECK' entries"
-                                  Foreground="#FF6B6B"
-                                  Checked="PersistFilterCheckBox_OnChanged"
-                                  Unchecked="PersistFilterCheckBox_OnChanged" />
-                        <Button x:Name="PersistOpenSelectedButton"
-                                Content="Investigate selected ..."
-                                Width="190"
-                                Click="PersistOpenSelectedButton_OnClick" />
-                      </StackPanel>
-
-                      <Border Background="#050E10"
-                              Padding="8"
-                              CornerRadius="4"
-                              BorderBrush="#1A3C3F"
-                              BorderThickness="1"
-                              Margin="0,8,0,0">
-
-                        <StackPanel>
-                          <TextBlock Text="Results"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Foreground="#EAF7F7"
-                                    Margin="0,0,0,6" />
-
-                          <ListBox x:Name="PersistResultsList"
-                                  Height="660"
-                                  Background="#050E10"
-                                  BorderThickness="0"
-                                  Foreground="#C7D4D4"
-                                  DoubleTapped="PersistResultsList_OnDoubleTapped" />
-                        </StackPanel>
-                      </Border>
+                        <TextBlock x:Name="PersistStatusText"
+                                  Text="Status: idle."
+                                  VerticalAlignment="Center"
+                                  TextWrapping="Wrap" />
                     </StackPanel>
-                  </Border>
-                </TabItem>
+
+                    <!-- Filters row -->
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal"
+                                Spacing="12"
+                                Margin="0,12,0,8">
+                        <CheckBox x:Name="PersistShowCheckOnlyCheckBox"
+                                  Content="Show only CHECK entries"
+                                  Click="PersistFilterCheckBox_OnChanged"
+                                  VerticalAlignment="Center" />
+
+                        <ComboBox x:Name="PersistLocationFilterCombo"
+                                  Width="180"
+                                  SelectionChanged="PersistLocationFilterCombo_OnSelectionChanged">
+                            <ComboBoxItem>All locations</ComboBoxItem>
+                            <ComboBoxItem>Registry autoruns</ComboBoxItem>
+                            <ComboBoxItem>Startup folders</ComboBoxItem>
+                            <ComboBoxItem>Services / drivers</ComboBoxItem>
+                        </ComboBox>
+
+                        <TextBox x:Name="PersistSearchTextBox"
+                                Width="260"
+                                Watermark="Search name, path, source, reason..."
+                                TextChanged="PersistSearchTextBox_OnTextChanged" />
+                    </StackPanel>
+
+                    <!-- Results + detail -->
+                    <Grid Grid.Row="2"
+                          ColumnDefinitions="2*,*">
+                        <!-- List -->
+                       <ListBox x:Name="PersistResultsList"
+                                Grid.Column="0"
+                                Margin="0,0,8,0"
+                                DoubleTapped="PersistResultsList_OnDoubleTapped">
+                            <ListBox.ItemTemplate>
+                              <DataTemplate x:DataType="models:PersistItem">
+                                  <Border Padding="8"
+                                          Margin="0,0,0,6"
+                                          CornerRadius="4"
+                                          BorderThickness="1"
+                                          BorderBrush="#333">
+                                      <StackPanel Spacing="2">
+                                          <!-- Top line: Risk badge + location/source -->
+                                          <StackPanel Orientation="Horizontal"
+                                                      Spacing="8">
+                                              <Border Padding="4,1"
+                                                      CornerRadius="3"
+                                                      Background="#40222222">
+                                                  <TextBlock Text="{Binding Risk}"
+                                                            FontSize="11" />
+                                              </Border>
+
+                                              <TextBlock FontSize="11">
+                                                  <Run Text="{Binding LocationType}" />
+                                                  <Run Text=" • " />
+                                                  <Run Text="{Binding Source}" />
+                                              </TextBlock>
+                                          </StackPanel>
+
+                                          <!-- Name -->
+                                          <TextBlock Text="{Binding Name}"
+                                                    FontWeight="SemiBold"
+                                                    Margin="0,4,0,0" />
+
+                                          <!-- Path / RegistryPath (truncated) -->
+                                          <TextBlock Text="{Binding Path}"
+                                                    FontSize="11"
+                                                    TextTrimming="CharacterEllipsis" />
+                                          <TextBlock Text="{Binding RegistryPath}"
+                                                    FontSize="11"
+                                                    TextTrimming="CharacterEllipsis" />
+
+                                          <!-- Reason -->
+                                          <TextBlock Text="{Binding Reason}"
+                                                    FontSize="11"
+                                                    Margin="0,4,0,0"
+                                                    TextWrapping="Wrap" />
+
+                                          <!-- MITRE -->
+                                          <TextBlock Text="{Binding MitreTechnique}"
+                                                    FontSize="10"
+                                                    Foreground="#FFAAAAAA" />
+                                      </StackPanel>
+                                  </Border>
+                              </DataTemplate>
+                          </ListBox.ItemTemplate>
+
+                        </ListBox>
+
+
+                        <!-- Detail pane (bound to selected item) -->
+                        <Border Grid.Column="1"
+                                Padding="8"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="#333">
+                            <StackPanel DataContext="{Binding SelectedItem, ElementName=PersistResultsList}"
+                                        x:DataType="models:PersistItem"
+                                        Spacing="4">
+                                <TextBlock Text="Selected entry"
+                                          FontWeight="Bold"
+                                          Margin="0,0,0,4" />
+
+                                <TextBlock Text="{Binding Name}"
+                                          FontSize="14"
+                                          FontWeight="SemiBold" />
+
+                                <TextBlock Text="{Binding Risk}"
+                                          FontSize="12" />
+
+                                <TextBlock Text="{Binding LocationType}" />
+                                <TextBlock Text="{Binding Source}" />
+
+                                <TextBlock Text="Path:"
+                                          Margin="0,6,0,0"
+                                          FontWeight="SemiBold"
+                                          FontSize="11" />
+                                <TextBlock Text="{Binding Path}"
+                                          FontSize="11"
+                                          TextWrapping="Wrap" />
+
+                                <TextBlock Text="Registry path:"
+                                          Margin="0,6,0,0"
+                                          FontWeight="SemiBold"
+                                          FontSize="11" />
+                                <TextBlock Text="{Binding RegistryPath}"
+                                          FontSize="11"
+                                          TextWrapping="Wrap" />
+
+                                <TextBlock Text="Reason:"
+                                          Margin="0,6,0,0"
+                                          FontWeight="SemiBold"
+                                          FontSize="11" />
+                                <TextBlock Text="{Binding Reason}"
+                                          FontSize="11"
+                                          TextWrapping="Wrap" />
+
+                                <TextBlock Text="MITRE technique:"
+                                          Margin="0,6,0,0"
+                                          FontWeight="SemiBold"
+                                          FontSize="11" />
+                                <TextBlock Text="{Binding MitreTechnique}"
+                                          FontSize="11" />
+                            </StackPanel>
+                        </Border>
+
+                    </Grid>
+
+                    <!-- Footer -->
+                    <StackPanel Grid.Row="3"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0,8,0,0">
+                        <Button x:Name="PersistOpenSelectedButton"
+                                Content="Investigate selected"
+                                Click="PersistOpenSelectedButton_OnClick"
+                                MinWidth="150" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
 
                 <!-- SWEEP -->
                 <TabItem Header="Sweep">

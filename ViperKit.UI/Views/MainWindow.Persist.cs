@@ -135,7 +135,7 @@ public partial class MainWindow
         }
     }
 
-    // Central place to apply "show only CHECK" filter
+    // Central place to apply all Persist filters
     private void BindPersistResults()
     {
         if (PersistResultsList == null)
@@ -143,20 +143,73 @@ public partial class MainWindow
 
         IEnumerable<PersistItem> source = _persistItems;
 
+        // 1) "Show only CHECK" checkbox
         if (PersistShowCheckOnlyCheckBox?.IsChecked == true)
         {
             source = source.Where(p =>
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
         }
 
-        PersistResultsList.ItemsSource = source.ToArray();
+        // 2) Location filter (All / Registry / Startup / Services)
+        if (PersistLocationFilterCombo != null && PersistLocationFilterCombo.SelectedIndex > 0)
+        {
+            switch (PersistLocationFilterCombo.SelectedIndex)
+            {
+                case 1: // Registry autoruns
+                    source = source.Where(p =>
+                        p.LocationType.StartsWith("Autorun (Registry",
+                            StringComparison.OrdinalIgnoreCase));
+                    break;
+
+                case 2: // Startup folders
+                    source = source.Where(p =>
+                        p.LocationType.StartsWith("Startup folder",
+                            StringComparison.OrdinalIgnoreCase));
+                    break;
+
+                case 3: // Services / drivers
+                    source = source.Where(p =>
+                        p.LocationType.StartsWith("Service",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        p.LocationType.StartsWith("Driver",
+                            StringComparison.OrdinalIgnoreCase));
+                    break;
+            }
+        }
+
+        // 3) Text search across name / path / source / reason
+        string? term = PersistSearchTextBox?.Text;
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            term = term.Trim();
+
+            source = source.Where(p =>
+                (!string.IsNullOrEmpty(p.Name)   && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(p.Path)   && p.Path.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(p.Source) && p.Source.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(p.Reason) && p.Reason.Contains(term, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        PersistResultsList.ItemsSource = source.ToList();
     }
+
 
     // Checkbox toggled
     private void PersistFilterCheckBox_OnChanged(object? sender, RoutedEventArgs e)
     {
         BindPersistResults();
     }
+
+    private void PersistLocationFilterCombo_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        BindPersistResults();
+    }
+
+    private void PersistSearchTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        BindPersistResults();
+    }
+
 
     // Investigate button
     private void PersistOpenSelectedButton_OnClick(object? sender, RoutedEventArgs e)
@@ -580,44 +633,5 @@ public partial class MainWindow
 
         return false;
     }
-
-    // Simple model for persistence entries used by Persist tab
-    private sealed class PersistItem
-    {
-        public string Source { get; set; } = string.Empty;
-        public string LocationType { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string Path { get; set; } = string.Empty;
-        public string RegistryPath { get; set; } = string.Empty;
-        public string Risk { get; set; } = string.Empty;
-        public string Reason { get; set; } = string.Empty;
-        public string MitreTechnique { get; set; } = string.Empty;
-
-        public override string ToString()
-        {
-            var sb = new StringBuilder();
-
-            sb.Append('[').Append(LocationType).Append("] ");
-            sb.Append(Risk).Append(" – ").Append(Name);
-
-            if (!string.IsNullOrWhiteSpace(Source))
-                sb.Append("  (").Append(Source).Append(')');
-
-            sb.AppendLine();
-
-            if (!string.IsNullOrWhiteSpace(Path))
-                sb.AppendLine("  Path: " + Path);
-
-            if (!string.IsNullOrWhiteSpace(RegistryPath))
-                sb.AppendLine("  Registry: " + RegistryPath);
-
-            if (!string.IsNullOrWhiteSpace(Reason))
-                sb.AppendLine("  Reason: " + Reason);
-
-            if (!string.IsNullOrWhiteSpace(MitreTechnique))
-                sb.AppendLine("  MITRE: " + MitreTechnique);
-
-            return sb.ToString().TrimEnd();
-        }
-    }
+    
 }
