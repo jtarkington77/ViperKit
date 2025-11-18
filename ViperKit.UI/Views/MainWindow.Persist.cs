@@ -41,6 +41,9 @@ public partial class MainWindow
             // 3) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
             CollectServiceAndDriverPersistence();
 
+            // 4) Scheduled tasks
+            CollectScheduledTasks();
+
 
             // Count how many items are flagged as CHECK
             int flaggedCount = _persistItems.Count(p =>
@@ -150,7 +153,7 @@ public partial class MainWindow
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
         }
 
-        // 2) Location filter (All / Registry / Startup / Services)
+        // 2) Location filter (All / Registry / Startup / Services / Tasks)
         if (PersistLocationFilterCombo != null && PersistLocationFilterCombo.SelectedIndex > 0)
         {
             switch (PersistLocationFilterCombo.SelectedIndex)
@@ -172,6 +175,12 @@ public partial class MainWindow
                         p.LocationType.StartsWith("Service",
                             StringComparison.OrdinalIgnoreCase) ||
                         p.LocationType.StartsWith("Driver",
+                            StringComparison.OrdinalIgnoreCase));
+                    break;
+
+                case 4: // Scheduled tasks
+                    source = source.Where(p =>
+                        p.LocationType.StartsWith("Scheduled task",
                             StringComparison.OrdinalIgnoreCase));
                     break;
             }
@@ -629,6 +638,125 @@ public partial class MainWindow
         }
     }
 
+    //Enumerate WIndows Scheduled Tasks and add them as persistence entries
+    private void CollectScheduledTasks()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName               = "schtasks.exe",
+                Arguments              = "/Query /FO CSV /V",
+                UseShellExecute        = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = false,
+                CreateNoWindow         = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+                return;
+
+            using var reader = proc.StandardOutput;
+
+            string? headerLine = reader.ReadLine();
+            if (string.IsNullOrWhiteSpace(headerLine))
+                return;
+
+            var headers = SplitCsvLine(headerLine).ToArray();
+            if (headers.Length == 0)
+                return;
+
+            int idxTaskName   = Array.FindIndex(headers, h => string.Equals(h, "TaskName",   StringComparison.OrdinalIgnoreCase));
+            int idxTaskToRun  = Array.FindIndex(headers, h => string.Equals(h, "Task To Run", StringComparison.OrdinalIgnoreCase));
+            int idxSchedule   = Array.FindIndex(headers, h => string.Equals(h, "Schedule",    StringComparison.OrdinalIgnoreCase));
+            int idxNextRun    = Array.FindIndex(headers, h => string.Equals(h, "Next Run Time", StringComparison.OrdinalIgnoreCase));
+
+            if (idxTaskName < 0 || idxTaskToRun < 0)
+                return; // critical fields missing
+
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var fields = SplitCsvLine(line).ToArray();
+                if (fields.Length <= Math.Max(idxTaskName, idxTaskToRun))
+                    continue;
+
+                string taskName    = GetCsvField(fields, idxTaskName);
+                string taskToRun   = GetCsvField(fields, idxTaskToRun);
+                string schedule    = idxSchedule >= 0 ? GetCsvField(fields, idxSchedule) : string.Empty;
+                string nextRunTime = idxNextRun >= 0 ? GetCsvField(fields, idxNextRun) : string.Empty;
+
+                if (string.IsNullOrWhiteSpace(taskName))
+                    continue;
+
+                // Expand env vars; some tasks use %SystemRoot%, etc.
+                if (!string.IsNullOrWhiteSpace(taskToRun) && taskToRun.Contains('%'))
+                    taskToRun = Environment.ExpandEnvironmentVariables(taskToRun);
+
+                string exePath      = ExtractExecutablePath(taskToRun);
+                bool   existsOnDisk = !string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath);
+
+                // Built-in Microsoft tasks usually live under \Microsoft\Windows\...
+                bool isBuiltIn = taskName.StartsWith(@"\Microsoft\Windows\", StringComparison.OrdinalIgnoreCase);
+
+                string risk;
+                string reason;
+
+                if (string.IsNullOrWhiteSpace(exePath))
+                {
+                    risk   = "CHECK – no action path";
+                    reason = "Scheduled task without a clear executable/script path.";
+                }
+                else if (!existsOnDisk)
+                {
+                    risk   = "CHECK – binary missing on disk";
+                    reason = $"Task action points to a file that does not exist: {exePath}";
+                }
+                else if (!isBuiltIn && IsSuspiciousLocation(exePath))
+                {
+                    risk   = "CHECK – unusual location";
+                    reason = $"Task action under user/temporary path: {exePath}";
+                }
+                else
+                {
+                    risk   = "OK";
+                    reason = isBuiltIn
+                        ? "Built-in Windows scheduled task."
+                        : "Scheduled task in common location for system/third-party software.";
+                }
+
+                var reasonBuilder = new StringBuilder(reason);
+
+                if (!string.IsNullOrWhiteSpace(schedule))
+                    reasonBuilder.Append($" Schedule: {schedule}.");
+
+                if (!string.IsNullOrWhiteSpace(nextRunTime))
+                    reasonBuilder.Append($" Next run: {nextRunTime}.");
+
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = "Scheduled tasks",
+                    LocationType   = "Scheduled task",
+                    Name           = taskName,
+                    Path           = exePath,
+                    RegistryPath   = taskName, // task path, stored here to avoid a new field
+                    Risk           = risk,
+                    Reason         = reasonBuilder.ToString(),
+                    MitreTechnique = "T1053.005"
+                });
+            }
+        }
+        catch
+        {
+            // In v1, fail silently – other persistence sources still populate the tab.
+        }
+    }
+
+
 #pragma warning restore CA1416
 
     // -----------------------------------------
@@ -700,6 +828,67 @@ public partial class MainWindow
                 }
             }
 
+            // Scheduled task → open Task Scheduler
+            if (item.LocationType.StartsWith("Scheduled task", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName        = "taskschd.msc",
+                        UseShellExecute = true
+                    });
+
+                    if (PersistStatusText != null)
+                        PersistStatusText.Text =
+                            $"Status: opened Task Scheduler – locate task: {item.Name}.";
+
+                    LogPersistInvestigation(item, "Task Scheduler");
+                    return;
+                }
+                catch
+                {
+                    if (PersistStatusText != null)
+                        PersistStatusText.Text =
+                            "Status: failed to open Task Scheduler for this entry.";
+                    // fall through to other options
+                }
+            }
+
+            // Service / Driver → open Services.msc
+            if (item.LocationType.StartsWith("Service", StringComparison.OrdinalIgnoreCase) ||
+                item.LocationType.StartsWith("Driver",  StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName        = "services.msc",
+                        UseShellExecute = true
+                    });
+
+                    if (PersistStatusText != null)
+                    {
+                        var nameText = string.IsNullOrWhiteSpace(item.Name)
+                            ? "this entry"
+                            : $"service/driver: {item.Name}";
+
+                        PersistStatusText.Text =
+                            $"Status: opened Services – locate {nameText}.";
+                    }
+
+                    LogPersistInvestigation(item, "Services.msc");
+                    return;
+                }
+                catch
+                {
+                    if (PersistStatusText != null)
+                        PersistStatusText.Text =
+                            "Status: failed to open Services for this entry.";
+                    // fall through to generic handling
+                }
+            }
+
             if (!openedSomething && PersistStatusText != null)
                 PersistStatusText.Text = "Status: nothing to open for this entry.";
         }
@@ -709,6 +898,8 @@ public partial class MainWindow
                 PersistStatusText.Text = "Status: failed to open location for this entry.";
         }
     }
+
+
 
     private void LogPersistInvestigation(PersistItem item, string via)
     {
@@ -761,6 +952,54 @@ public partial class MainWindow
     // -----------------------------------------
     // Utility helpers
     // -----------------------------------------
+    private static IEnumerable<string> SplitCsvLine(string line)
+    {
+        if (line == null)
+            yield break;
+
+        var sb      = new StringBuilder();
+        bool inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+
+            if (c == '"')
+            {
+                // Handle escaped quotes ("")
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    sb.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                yield return sb.ToString();
+                sb.Clear();
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+
+        // Last field
+        yield return sb.ToString();
+    }
+
+    private static string GetCsvField(string[] fields, int index)
+    {
+        if (index < 0 || index >= fields.Length)
+            return string.Empty;
+
+        return fields[index]?.Trim() ?? string.Empty;
+    }
+
     private static string ExtractExecutablePath(string input)
     {
         if (string.IsNullOrWhiteSpace(input))

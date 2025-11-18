@@ -340,6 +340,7 @@
                             <ComboBoxItem>Registry autoruns</ComboBoxItem>
                             <ComboBoxItem>Startup folders</ComboBoxItem>
                             <ComboBoxItem>Services / drivers</ComboBoxItem>
+                            <ComboBoxItem>Scheduled tasks</ComboBoxItem>
                         </ComboBox>
 
                         <TextBox x:Name="PersistSearchTextBox"
