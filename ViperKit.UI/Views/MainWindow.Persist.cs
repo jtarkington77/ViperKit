@@ -231,6 +231,115 @@ public partial class MainWindow
         OpenPersistItem(item);
     }
 
+    // Copy the currently visible (filtered) Persist entries to clipboard
+    private async void PersistCopyResultsButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (PersistResultsList?.ItemsSource is not IEnumerable<PersistItem> items)
+            return;
+
+        var list = items.ToList();
+        if (list.Count == 0)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = "Status: nothing to copy (no entries match current filters).";
+            return;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var item in list)
+        {
+            sb.AppendLine(item.ToString());
+            sb.AppendLine(new string('-', 80));
+        }
+
+        var text = sb.ToString().TrimEnd();
+
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(text);
+                if (PersistStatusText != null)
+                    PersistStatusText.Text = $"Status: copied {list.Count} persistence entries to clipboard.";
+            }
+            else
+            {
+                if (PersistStatusText != null)
+                    PersistStatusText.Text = "Status: clipboard not available.";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = $"Status: failed to copy results – {ex.Message}";
+        }
+    }
+
+    // Save the currently visible (filtered) Persist entries to a text snapshot on disk
+    private void PersistSaveResultsButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (PersistResultsList?.ItemsSource is not IEnumerable<PersistItem> items)
+            return;
+
+        var list = items.ToList();
+        if (list.Count == 0)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = "Status: nothing to save (no entries match current filters).";
+            return;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var item in list)
+        {
+            sb.AppendLine(item.ToString());
+            sb.AppendLine(new string('-', 80));
+        }
+
+        var text = sb.ToString().TrimEnd();
+
+        try
+        {
+            // Folder under CommonDocuments – same idea as blueprint: predictable path, per-tab snapshots
+            var baseDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments),
+                "ViperKit",
+                "Persist");
+
+            Directory.CreateDirectory(baseDir);
+
+            var fileName = $"persist-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
+            var fullPath = Path.Combine(baseDir, fileName);
+
+            File.WriteAllText(fullPath, text, Encoding.UTF8);
+
+            if (PersistStatusText != null)
+                PersistStatusText.Text = $"Status: saved persistence snapshot to {fullPath}.";
+
+            // Case log entry for the snapshot action
+            try
+            {
+                CaseManager.AddEvent(
+                    tab: "Persist",
+                    action: "Persistence snapshot saved",
+                    severity: "INFO",
+                    target: fullPath,
+                    details: $"Entries: {list.Count}");
+            }
+            catch
+            {
+                // Case logging must not break UI
+            }
+        }
+        catch (Exception ex)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = $"Status: failed to save snapshot – {ex.Message}";
+        }
+    }
+
+
     // -----------------------------------------
     // COLLECTORS – Run keys + Startup folders
     // -----------------------------------------

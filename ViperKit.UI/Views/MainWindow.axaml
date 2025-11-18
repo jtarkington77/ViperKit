@@ -474,7 +474,16 @@
                     <StackPanel Grid.Row="3"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right"
-                                Margin="0,8,0,0">
+                                Margin="0,8,0,0"
+                                Spacing="8">
+                        <Button x:Name="PersistCopyResultsButton"
+                                Content="Copy results"
+                                MinWidth="120"
+                                Click="PersistCopyResultsButton_OnClick" />
+                        <Button x:Name="PersistSaveResultsButton"
+                                Content="Save snapshot"
+                                MinWidth="120"
+                                Click="PersistSaveResultsButton_OnClick" />
                         <Button x:Name="PersistOpenSelectedButton"
                                 Content="Investigate selected"
                                 Click="PersistOpenSelectedButton_OnClick"
