@@ -638,6 +638,8 @@ public partial class MainWindow
     {
         try
         {
+            bool openedSomething = false;
+
             // Registry-backed entry → open regedit
             if (item.LocationType.StartsWith("Autorun (Registry)", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(item.RegistryPath))
@@ -648,9 +650,12 @@ public partial class MainWindow
                     UseShellExecute = true
                 });
 
+                openedSomething = true;
+
                 if (PersistStatusText != null)
                     PersistStatusText.Text = $"Status: opened Regedit – navigate to {item.RegistryPath}.";
 
+                LogPersistInvestigation(item, "Regedit");
                 return;
             }
 
@@ -668,6 +673,8 @@ public partial class MainWindow
                         UseShellExecute = true
                     });
 
+                    openedSomething = true;
+
                     if (PersistStatusText != null)
                         PersistStatusText.Text = $"Status: opened Explorer at {path}.";
                 }
@@ -680,10 +687,21 @@ public partial class MainWindow
                         UseShellExecute = true
                     });
 
+                    openedSomething = true;
+
                     if (PersistStatusText != null)
                         PersistStatusText.Text = $"Status: opened Explorer at {path}.";
                 }
+
+                if (openedSomething)
+                {
+                    LogPersistInvestigation(item, "Explorer");
+                    return;
+                }
             }
+
+            if (!openedSomething && PersistStatusText != null)
+                PersistStatusText.Text = "Status: nothing to open for this entry.";
         }
         catch
         {
@@ -691,6 +709,54 @@ public partial class MainWindow
                 PersistStatusText.Text = "Status: failed to open location for this entry.";
         }
     }
+
+    private void LogPersistInvestigation(PersistItem item, string via)
+    {
+        try
+        {
+            var severity = item.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase)
+                ? "WARN"
+                : "INFO";
+
+            var target = string.IsNullOrWhiteSpace(item.Name)
+                ? "(unnamed entry)"
+                : item.Name;
+
+            var detailsBuilder = new StringBuilder();
+            detailsBuilder.Append($"Via: {via}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.LocationType))
+                detailsBuilder.Append($"Location: {item.LocationType}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Source))
+                detailsBuilder.Append($"Source: {item.Source}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Path))
+                detailsBuilder.Append($"Path: {item.Path}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.RegistryPath))
+                detailsBuilder.Append($"Registry: {item.RegistryPath}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Risk))
+                detailsBuilder.Append($"Risk: {item.Risk}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.MitreTechnique))
+                detailsBuilder.Append($"MITRE: {item.MitreTechnique}. ");
+
+            CaseManager.AddEvent(
+                tab: "Persist",
+                action: "Investigated persistence entry",
+                severity: severity,
+                target: target,
+                details: detailsBuilder.ToString());
+        }
+        catch
+        {
+            // Case logging must never break the UI.
+        }
+    }
+
+
 
     // -----------------------------------------
     // Utility helpers
