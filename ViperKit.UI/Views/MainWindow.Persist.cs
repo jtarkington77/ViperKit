@@ -35,15 +35,20 @@ public partial class MainWindow
             // 1) Registry Run / RunOnce – 32/64-bit, HKCU + HKLM
             CollectRunKeyAutoruns();
 
-            // 2) Startup folders – per-user + all users
+            // 2) Winlogon Shell / Userinit
+            CollectWinlogonPersistence();
+
+            // 3) Image File Execution Options (IFEO) debugger hijacks
+            CollectImageFileExecutionOptionsPersistence();
+
+            // 4) Startup folders – per-user + all users
             CollectStartupFolderAutoruns();
 
-            // 3) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
+            // 5) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
             CollectServiceAndDriverPersistence();
 
-            // 4) Scheduled tasks
+            // 6) Scheduled tasks
             CollectScheduledTasks();
-
 
             // Count how many items are flagged as CHECK
             int flaggedCount = _persistItems.Count(p =>
@@ -757,6 +762,183 @@ public partial class MainWindow
     }
 
 
+// Inspect Winlogon Shell / Userinit for logon-time persistence.
+
+private void CollectWinlogonPersistence()
+{
+    try
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(
+            @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon");
+        if (key == null)
+            return;
+
+        // Shell -------------------------------------------------
+        string shellRaw = key.GetValue("Shell") as string ?? string.Empty;
+        string shellExpanded = shellRaw;
+
+        if (!string.IsNullOrWhiteSpace(shellExpanded) && shellExpanded.Contains('%'))
+            shellExpanded = Environment.ExpandEnvironmentVariables(shellExpanded);
+
+        string shellExe = ExtractExecutablePath(shellExpanded);
+
+        // Default-ish: "explorer.exe" or something ending in "\explorer.exe"
+        bool shellLooksDefault =
+            !string.IsNullOrWhiteSpace(shellExe) &&
+            (shellExe.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase) ||
+             shellExe.EndsWith(@"\explorer.exe", StringComparison.OrdinalIgnoreCase));
+
+        string shellRisk;
+        string shellReason;
+
+        if (string.IsNullOrWhiteSpace(shellRaw))
+        {
+            shellRisk   = "CHECK – Shell value missing";
+            shellReason = "Winlogon Shell is empty or not set (may be tampered).";
+        }
+        else if (!shellLooksDefault)
+        {
+            shellRisk   = "CHECK – non-standard shell";
+            shellReason = $"Winlogon Shell is set to: {shellRaw}";
+        }
+        else
+        {
+            shellRisk   = "OK";
+            shellReason = "Shell points to the standard Windows Explorer shell.";
+        }
+
+        _persistItems.Add(new PersistItem
+        {
+            Source         = "Winlogon",
+            LocationType   = "Autorun (Registry – Winlogon)",
+            Name           = "Winlogon Shell",
+            Path           = shellExe,
+            RegistryPath   = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell",
+            Risk           = shellRisk,
+            Reason         = shellReason,
+            MitreTechnique = "T1547.004" // Boot or Logon Autostart – Winlogon
+        });
+
+        // Userinit ----------------------------------------------
+        string userinitRaw = key.GetValue("Userinit") as string ?? string.Empty;
+        string userinitExpanded = userinitRaw;
+
+        if (!string.IsNullOrWhiteSpace(userinitExpanded) && userinitExpanded.Contains('%'))
+            userinitExpanded = Environment.ExpandEnvironmentVariables(userinitExpanded);
+
+        string userinitExe = ExtractExecutablePath(userinitExpanded);
+
+        // Default pattern: C:\Windows\system32\userinit.exe,
+        bool userinitLooksDefault =
+            !string.IsNullOrWhiteSpace(userinitRaw) &&
+            userinitRaw.IndexOf("userinit.exe", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        string userinitRisk;
+        string userinitReason;
+
+        if (string.IsNullOrWhiteSpace(userinitRaw))
+        {
+            userinitRisk   = "CHECK – Userinit missing";
+            userinitReason = "Winlogon Userinit value is empty or not set (may be tampered).";
+        }
+        else if (!userinitLooksDefault)
+        {
+            userinitRisk   = "CHECK – non-standard Userinit";
+            userinitReason = $"Winlogon Userinit is set to: {userinitRaw}";
+        }
+        else
+        {
+            userinitRisk   = "OK";
+            userinitReason = "Userinit matches standard Windows configuration.";
+        }
+
+        _persistItems.Add(new PersistItem
+        {
+            Source         = "Winlogon",
+            LocationType   = "Autorun (Registry – Winlogon)",
+            Name           = "Winlogon Userinit",
+            Path           = userinitExe,
+            RegistryPath   = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Userinit",
+            Risk           = userinitRisk,
+            Reason         = userinitReason,
+            MitreTechnique = "T1547.004"
+        });
+    }
+    catch
+    {
+        // Silent fail – other persistence sources will still appear.
+    }
+}
+
+// Inspect Image File Execution Options (IFEO) for debugger hijacks.
+private void CollectImageFileExecutionOptionsPersistence()
+{
+    try
+    {
+        using var ifeoRoot = Registry.LocalMachine.OpenSubKey(
+            @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options");
+        if (ifeoRoot == null)
+            return;
+
+        foreach (var exeName in ifeoRoot.GetSubKeyNames())
+        {
+            using var exeKey = ifeoRoot.OpenSubKey(exeName);
+            if (exeKey == null)
+                continue;
+
+            string debuggerRaw = exeKey.GetValue("Debugger") as string ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(debuggerRaw))
+                continue; // no debugger set, ignore for v1
+
+            string debuggerExpanded = debuggerRaw;
+            if (debuggerExpanded.Contains('%'))
+                debuggerExpanded = Environment.ExpandEnvironmentVariables(debuggerExpanded);
+
+            string debuggerExe  = ExtractExecutablePath(debuggerExpanded);
+            bool   existsOnDisk = !string.IsNullOrWhiteSpace(debuggerExe) && File.Exists(debuggerExe);
+
+            // IFEO debugger is always worth a look for help-desk, so treat as CHECK by default
+            string risk;
+            string reason;
+
+            if (!existsOnDisk)
+            {
+                risk   = "CHECK – IFEO debugger missing on disk";
+                reason = $"IFEO Debugger for {exeName} points to {debuggerExe}, which does not exist.";
+            }
+            else if (IsSuspiciousLocation(debuggerExe))
+            {
+                risk   = "CHECK – IFEO debugger in unusual location";
+                reason = $"IFEO Debugger for {exeName} points to {debuggerExe} under a user/temporary path.";
+            }
+            else
+            {
+                risk   = "CHECK – IFEO debugger configured";
+                reason = $"IFEO Debugger is configured for {exeName}: {debuggerRaw}";
+            }
+
+            _persistItems.Add(new PersistItem
+            {
+                Source         = "IFEO",
+                LocationType   = "Autorun (Registry – IFEO Debugger)",
+                Name           = exeName,
+                Path           = debuggerExe,
+                RegistryPath   = exeKey.Name, // full IFEO subkey path
+                Risk           = risk,
+                Reason         = reason,
+                MitreTechnique = "T1546.012" // Image File Execution Options Injection
+            });
+        }
+    }
+    catch
+    {
+        // Silent fail; other categories still populate.
+    }
+}
+
+
+
+
 #pragma warning restore CA1416
 
     // -----------------------------------------
@@ -899,7 +1081,65 @@ public partial class MainWindow
         }
     }
 
+    private void PersistAddToCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var item = PersistResultsList?.SelectedItem as PersistItem;
+        if (item == null)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = "Status: no entry selected to add to case.";
+            return;
+        }
 
+        try
+        {
+            var severity = item.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase)
+                ? "WARN"
+                : "INFO";
+
+            var target = string.IsNullOrWhiteSpace(item.Name)
+                ? "(unnamed entry)"
+                : item.Name;
+
+            var detailsBuilder = new StringBuilder();
+
+            if (!string.IsNullOrWhiteSpace(item.LocationType))
+                detailsBuilder.Append($"Location: {item.LocationType}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Source))
+                detailsBuilder.Append($"Source: {item.Source}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Path))
+                detailsBuilder.Append($"Path: {item.Path}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.RegistryPath))
+                detailsBuilder.Append($"Registry: {item.RegistryPath}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Risk))
+                detailsBuilder.Append($"Risk: {item.Risk}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Reason))
+                detailsBuilder.Append($"Reason: {item.Reason}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.MitreTechnique))
+                detailsBuilder.Append($"MITRE: {item.MitreTechnique}. ");
+
+            CaseManager.AddEvent(
+                tab: "Persist",
+                action: "Persistence entry added to case",
+                severity: severity,
+                target: target,
+                details: detailsBuilder.ToString());
+
+            if (PersistStatusText != null)
+                PersistStatusText.Text = "Status: added selected persistence entry to case log.";
+        }
+        catch (Exception ex)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = $"Status: failed to add entry to case – {ex.Message}";
+        }
+    }
 
     private void LogPersistInvestigation(PersistItem item, string via)
     {
