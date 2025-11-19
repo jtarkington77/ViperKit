@@ -41,38 +41,46 @@ public partial class MainWindow
             // 3) Image File Execution Options (IFEO) debugger hijacks
             CollectImageFileExecutionOptionsPersistence();
 
-            // 4) Startup folders – per-user + all users
+            // 4) AppInit DLLs (process-wide DLL injection)
+            CollectAppInitDllsPersistence();
+
+            // 5) Startup folders – per-user + all users
             CollectStartupFolderAutoruns();
 
-            // 5) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
+            // 6) Services + drivers – HKLM\SYSTEM\CurrentControlSet\Services
             CollectServiceAndDriverPersistence();
 
-            // 6) Scheduled tasks
+            // 7) Scheduled tasks
             CollectScheduledTasks();
 
             // Count how many items are flagged as CHECK
             int flaggedCount = _persistItems.Count(p =>
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
 
-            // Bind into UI ListBox (respecting "show only CHECK" checkbox)
+            // NEW: count high-signal hotspots for triage view
+            int hotspotCount = _persistItems.Count(IsHighSignalPersistItem);
+
+            // Bind into UI ListBox (respecting filters)
             BindPersistResults();
 
             if (PersistStatusText != null)
             {
                 PersistStatusText.Text =
-                    $"Status: found {_persistItems.Count} persistence entry/entries; {flaggedCount} marked 'CHECK'.";
+                    $"Status: found {_persistItems.Count} persistence entry/entries; " +
+                    $"{flaggedCount} marked 'CHECK'; {hotspotCount} high-signal hotspot(s).";
             }
 
             // JSON log of this snapshot (lightweight, for later case review)
             try
             {
-                JsonLog.Append("persist", new
+               JsonLog.Append("persist", new
                 {
                     Timestamp    = DateTime.Now,
                     Host         = Environment.MachineName,
                     User         = Environment.UserName,
                     TotalEntries = _persistItems.Count,
                     FlaggedCount = flaggedCount,
+                    HotspotCount = hotspotCount,   // <— add this line
                     Entries      = _persistItems.Select(p => new
                     {
                         p.Source,
@@ -99,9 +107,9 @@ public partial class MainWindow
                     action: "Persistence scan completed",
                     severity: flaggedCount > 0 ? "WARN" : "INFO",
                     target: $"Entries: {_persistItems.Count}",
-                    details: flaggedCount > 0
-                        ? $"{flaggedCount} entry/entries marked CHECK."
-                        : "No entries marked CHECK.");
+                    details: _persistItems.Count == 0
+                        ? "No persistence entries found."
+                        : $"{flaggedCount} entry/entries marked CHECK; {hotspotCount} high-signal hotspot(s).");
             }
             catch
             {
@@ -142,6 +150,7 @@ public partial class MainWindow
             }
         }
     }
+
 
     // Central place to apply all Persist filters
     private void BindPersistResults()
@@ -191,7 +200,30 @@ public partial class MainWindow
             }
         }
 
-        // 3) Text search across name / path / source / reason
+        // 3) NEW: risk / triage mode
+        if (PersistRiskFilterCombo != null)
+        {
+            switch (PersistRiskFilterCombo.SelectedIndex)
+            {
+                case 1: // High-signal hotspots
+                    source = source.Where(IsHighSignalPersistItem);
+                    break;
+
+                case 2: // CHECK only
+                    source = source.Where(p =>
+                        p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
+                    break;
+
+                case 3: // Notes & OK
+                    source = source.Where(p =>
+                        p.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase) ||
+                        p.Risk.StartsWith("OK",   StringComparison.OrdinalIgnoreCase));
+                    break;
+                // case 0 = All severities (no extra filter)
+            }
+        }
+
+        // 4) Text search across name / path / source / reason
         string? term = PersistSearchTextBox?.Text;
         if (!string.IsNullOrWhiteSpace(term))
         {
@@ -208,6 +240,8 @@ public partial class MainWindow
     }
 
 
+
+
     // Checkbox toggled
     private void PersistFilterCheckBox_OnChanged(object? sender, RoutedEventArgs e)
     {
@@ -220,6 +254,11 @@ public partial class MainWindow
     }
 
     private void PersistSearchTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        BindPersistResults();
+    }
+
+    private void PersistRiskFilterCombo_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         BindPersistResults();
     }
@@ -585,11 +624,26 @@ public partial class MainWindow
                 string exePath       = ExtractExecutablePath(expandedPath);
                 bool   existsOnDisk  = !string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath);
 
-                // Risk heuristic: same flavor as Run/Startup
+                // Risk heuristic: tone down noise from stale services
                 string risk;
-                if (!existsOnDisk || string.IsNullOrWhiteSpace(exePath))
+
+                if (string.IsNullOrWhiteSpace(exePath))
                 {
-                    risk = "CHECK – binary missing on disk";
+                    // Unknown / grouped services (e.g. svchost groups) – don't scream
+                    risk = "OK";
+                }
+                else if (!existsOnDisk)
+                {
+                    if (IsSuspiciousLocation(exePath))
+                    {
+                        // Missing AND in a weird place = worth a CHECK
+                        risk = "CHECK – binary missing in suspicious path";
+                    }
+                    else
+                    {
+                        // Common case: leftover service from an uninstalled app
+                        risk = "NOTE – binary missing (likely stale service entry)";
+                    }
                 }
                 else if (IsSuspiciousLocation(exePath))
                 {
@@ -599,6 +653,7 @@ public partial class MainWindow
                 {
                     risk = "OK";
                 }
+
 
                 // MITRE mapping: Windows service vs driver persistence
                 string mitreId = isDriver ? "T1547.006" : "T1543.003";
@@ -713,13 +768,30 @@ public partial class MainWindow
 
                 if (string.IsNullOrWhiteSpace(exePath))
                 {
-                    risk   = "CHECK – no action path";
-                    reason = "Scheduled task without a clear executable/script path.";
+                    if (isBuiltIn)
+                    {
+                        risk   = "OK";
+                        reason = "Built-in Windows scheduled task with no explicit action path.";
+                    }
+                    else
+                    {
+                        risk   = "CHECK – no action path";
+                        reason = "Scheduled task without a clear executable/script path.";
+                    }
                 }
                 else if (!existsOnDisk)
                 {
-                    risk   = "CHECK – binary missing on disk";
-                    reason = $"Task action points to a file that does not exist: {exePath}";
+                    if (!isBuiltIn && IsSuspiciousLocation(exePath))
+                    {
+                        risk   = "CHECK – binary missing in suspicious path";
+                        reason = $"Task action points to missing file in suspicious location: {exePath}";
+                    }
+                    else
+                    {
+                        // Most of the noisy stuff ends up here
+                        risk   = "NOTE – binary missing (likely stale task)";
+                        reason = $"Task action points to a file that does not exist: {exePath}";
+                    }
                 }
                 else if (!isBuiltIn && IsSuspiciousLocation(exePath))
                 {
@@ -733,6 +805,7 @@ public partial class MainWindow
                         ? "Built-in Windows scheduled task."
                         : "Scheduled task in common location for system/third-party software.";
                 }
+
 
                 var reasonBuilder = new StringBuilder(reason);
 
@@ -936,8 +1009,138 @@ private void CollectImageFileExecutionOptionsPersistence()
     }
 }
 
+/// <summary>
+/// Inspect AppInit_DLLs / LoadAppInit_DLLs for process-wide DLL injection.
+/// HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows
+/// and the Wow6432Node equivalent.
+/// </summary>
+private void CollectAppInitDllsPersistence()
+{
+    try
+    {
+        // 64-bit view
+        CollectAppInitDllsHive(
+            "AppInit DLLs (64-bit)",
+            Registry.LocalMachine,
+            @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows");
 
+        // 32-bit view on 64-bit systems
+        CollectAppInitDllsHive(
+            "AppInit DLLs (32-bit Wow6432Node)",
+            Registry.LocalMachine,
+            @"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows");
+    }
+    catch
+    {
+        // If this whole section fails, other persistence sources still populate.
+    }
+}
 
+private void CollectAppInitDllsHive(string label, RegistryKey root, string subKeyPath)
+{
+    try
+    {
+        using var key = root.OpenSubKey(subKeyPath);
+        if (key == null)
+            return;
+
+        string dllListRaw  = key.GetValue("AppInit_DLLs") as string ?? string.Empty;
+        string loadFlagRaw = key.GetValue("LoadAppInit_DLLs")?.ToString() ?? string.Empty;
+
+        // If both are totally blank, there is nothing interesting here.
+        if (string.IsNullOrWhiteSpace(dllListRaw) && string.IsNullOrWhiteSpace(loadFlagRaw))
+            return;
+
+        bool loadEnabled = false;
+        if (int.TryParse(loadFlagRaw, out var loadVal))
+            loadEnabled = loadVal != 0;
+
+        // AppInit_DLLs can be a space- or semicolon-separated list of DLLs.
+        var dlls = dllListRaw
+            .Split(new[] { ' ', '\t', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .ToArray();
+
+        // If LoadAppInit_DLLs is enabled but DLL list is empty, still flag it as weird.
+        if (dlls.Length == 0)
+        {
+            if (loadEnabled)
+            {
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = label,
+                    LocationType   = "Autorun (Registry – AppInit_DLLs)",
+                    Name           = "AppInit_DLLs",
+                    Path           = string.Empty,
+                    RegistryPath   = $"{root.Name}\\{subKeyPath}",
+                    Risk           = "CHECK – AppInit enabled with no DLLs",
+                    Reason         = "LoadAppInit_DLLs is enabled but AppInit_DLLs is empty.",
+                    MitreTechnique = "T1546.010"
+                });
+            }
+
+            return;
+        }
+
+        foreach (var rawDll in dlls)
+        {
+            string expanded = rawDll;
+            if (expanded.Contains('%'))
+                expanded = Environment.ExpandEnvironmentVariables(expanded);
+
+            // If the path is not rooted, assume System32 
+            string fullPath = expanded;
+            if (!Path.IsPathRooted(fullPath))
+            {
+                var systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                fullPath = Path.Combine(systemDir, fullPath);
+            }
+
+            bool exists = File.Exists(fullPath);
+
+            string risk;
+            var reasonBuilder = new StringBuilder();
+            reasonBuilder.Append($"AppInit DLL: {rawDll}. ");
+
+            if (!exists)
+            {
+                risk = "CHECK – AppInit DLL missing on disk";
+                reasonBuilder.Append($"Resolved path {fullPath} does not exist. ");
+            }
+            else if (IsSuspiciousLocation(fullPath))
+            {
+                risk = "CHECK – AppInit DLL in unusual location";
+                reasonBuilder.Append($"DLL located under user/temporary path: {fullPath}. ");
+            }
+            else
+            {
+                // Even when in a normal system location, AppInit_DLLs are worth a look.
+                risk = "CHECK – AppInit DLL configured";
+                reasonBuilder.Append($"DLL in common system location: {fullPath}. ");
+            }
+
+            if (loadEnabled)
+                reasonBuilder.Append("LoadAppInit_DLLs is enabled.");
+            else
+                reasonBuilder.Append("LoadAppInit_DLLs is disabled (may not be active on this system).");
+
+            _persistItems.Add(new PersistItem
+            {
+                Source         = label,
+                LocationType   = "Autorun (Registry – AppInit_DLLs)",
+                Name           = Path.GetFileName(rawDll),
+                Path           = fullPath,
+                RegistryPath   = $"{root.Name}\\{subKeyPath}",
+                Risk           = risk,
+                Reason         = reasonBuilder.ToString(),
+                MitreTechnique = "T1546.010"
+            });
+        }
+    }
+    catch
+    {
+        // Ignore hive-level errors; worst case, fewer entries show up.
+    }
+}
 
 #pragma warning restore CA1416
 
@@ -1187,7 +1390,46 @@ private void CollectImageFileExecutionOptionsPersistence()
         }
     }
 
+    // High-signal triage helper for the risk filter
+    private bool IsHighSignalPersistItem(PersistItem p)
+    {
+        if (p == null)
+            return false;
 
+        string loc  = p.LocationType ?? string.Empty;
+        string src  = p.Source       ?? string.Empty;
+        string path = p.Path         ?? string.Empty;
+        string risk = p.Risk         ?? string.Empty;
+
+        // IFEO / Winlogon / AppInit_DLLs are always worth a look
+        if (src.Equals("IFEO", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (src.Equals("Winlogon", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (loc.Contains("AppInit_DLLs", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Autorun / Startup entries under user/AppData/Temp
+        if (loc.StartsWith("Autorun", StringComparison.OrdinalIgnoreCase) ||
+            loc.StartsWith("Startup folder", StringComparison.OrdinalIgnoreCase))
+        {
+            if (IsSuspiciousLocation(path))
+                return true;
+        }
+
+        // Services / drivers / tasks that are actively flagged CHECK
+        if ((loc.StartsWith("Service", StringComparison.OrdinalIgnoreCase) ||
+             loc.StartsWith("Driver",  StringComparison.OrdinalIgnoreCase) ||
+             loc.StartsWith("Scheduled task", StringComparison.OrdinalIgnoreCase)) &&
+            risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
 
     // -----------------------------------------
     // Utility helpers
@@ -1263,28 +1505,42 @@ private void CollectImageFileExecutionOptionsPersistence()
         return trimmed;
     }
 
-    private static bool IsSuspiciousLocation(string? path)
+   private static bool IsSuspiciousLocation(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
             return true;
 
-        string lower = path.ToLowerInvariant();
+        // Normalise slashes + lowercase for comparisons
+        string lower = path.Replace('/', '\\').ToLowerInvariant();
 
-        // User profile / AppData / Temp = more suspicious for autoruns
-        if (lower.Contains(@"\users\") ||
-            lower.Contains(@"\appdata\") ||
-            lower.Contains(@"\temp\"))
+        // 1) Very high-risk: stuff directly under user profile temp / downloads / desktop / public
+        if (lower.Contains(@"\users\"))
         {
-            return true;
+            if (lower.Contains(@"\appdata\local\temp\") ||
+                lower.Contains(@"\appdata\local\microsoft\windows\temporary internet files\") ||
+                lower.Contains(@"\downloads\") ||
+                lower.Contains(@"\desktop\") ||
+                lower.Contains(@"\public\") ||
+                lower.Contains(@"\onedrive\"))
+            {
+                return true;
+            }
         }
 
-        // If not under Windows or Program Files at all, treat as slightly odd
-        if (!lower.Contains(@":\windows") &&
-            !lower.Contains(@":\program files"))
-        {
+        // 2) Windows temp
+        if (lower.Contains(@"\windows\temp\"))
             return true;
-        }
 
+        // 3) ProgramData is *common* for legit services → do NOT treat as suspicious
+        if (lower.Contains(@"\programdata\"))
+            return false;
+
+        // 4) Anything under Windows or Program Files is considered normal for v1
+        if (lower.Contains(@":\windows\") ||
+            lower.Contains(@":\program files"))
+            return false;
+
+        // 5) Everything else: treat as NOT suspicious for now (we were way too aggressive before)
         return false;
     }
     

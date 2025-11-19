@@ -333,6 +333,17 @@
                                   Click="PersistFilterCheckBox_OnChanged"
                                   VerticalAlignment="Center" />
 
+                        <!-- NEW: risk / triage mode -->
+                        <ComboBox x:Name="PersistRiskFilterCombo"
+                                  Width="170"
+                                  SelectedIndex="0"
+                                  SelectionChanged="PersistRiskFilterCombo_OnSelectionChanged">
+                            <ComboBoxItem>All severities</ComboBoxItem>
+                            <ComboBoxItem>High-signal hotspots</ComboBoxItem>
+                            <ComboBoxItem>CHECK only</ComboBoxItem>
+                            <ComboBoxItem>Notes &amp; OK</ComboBoxItem>
+                        </ComboBox>
+
                         <ComboBox x:Name="PersistLocationFilterCombo"
                                   Width="180"
                                   SelectionChanged="PersistLocationFilterCombo_OnSelectionChanged">
@@ -348,6 +359,7 @@
                                 Watermark="Search name, path, source, reason..."
                                 TextChanged="PersistSearchTextBox_OnTextChanged" />
                     </StackPanel>
+
 
                     <!-- Results + detail -->
                     <Grid Grid.Row="2"
