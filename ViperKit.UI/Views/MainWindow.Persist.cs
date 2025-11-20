@@ -102,19 +102,26 @@ public partial class MainWindow
             // Case log summary
             try
             {
+                var summaryTarget = _persistItems.Count == 0
+                    ? "No persistence entries found."
+                    : $"Entries: {_persistItems.Count}, CHECK: {flaggedCount}, Hotspots: {hotspotCount}";
+
+                var summaryDetails = _persistItems.Count == 0
+                    ? "No persistence entries found in any monitored location."
+                    : $"{flaggedCount} entry/entries marked CHECK; {hotspotCount} high-signal hotspot(s).";
+
                 CaseManager.AddEvent(
                     tab: "Persist",
                     action: "Persistence scan completed",
                     severity: flaggedCount > 0 ? "WARN" : "INFO",
-                    target: $"Entries: {_persistItems.Count}",
-                    details: _persistItems.Count == 0
-                        ? "No persistence entries found."
-                        : $"{flaggedCount} entry/entries marked CHECK; {hotspotCount} high-signal hotspot(s).");
+                    target: summaryTarget,
+                    details: summaryDetails);
             }
             catch
             {
                 // Case logging must not crash UI
             }
+
         }
         catch (Exception ex)
         {
@@ -1154,8 +1161,8 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             bool openedSomething = false;
 
             // Registry-backed entry → open regedit
-            if (item.LocationType.StartsWith("Autorun (Registry)", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(item.RegistryPath))
+            if (!string.IsNullOrWhiteSpace(item.RegistryPath) &&
+                item.LocationType.StartsWith("Autorun (Registry", StringComparison.OrdinalIgnoreCase))
             {
                 Process.Start(new ProcessStartInfo
                 {

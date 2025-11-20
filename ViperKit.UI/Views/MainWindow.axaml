@@ -689,48 +689,57 @@
                                 Foreground="#8FA9AA"
                                 TextWrapping="Wrap" />
 
-                      <!-- SUMMARY ROW -->
-                      <Grid ColumnDefinitions="*,*,*,*" Margin="0,8,0,0">
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="Case ID"
-                                    FontSize="11"
-                                    Foreground="#8FA9AA" />
-                          <TextBlock x:Name="CaseSummaryIdText"
-                                    Text="(no case yet)"
-                                    FontSize="13"
-                                    Foreground="#C7D4D4" />
-                        </StackPanel>
+                     <!-- SUMMARY ROW -->
+                    <Grid ColumnDefinitions="2*,*,*,*" Margin="0,8,0,0">
+                      <!-- Case ID -->
+                      <StackPanel Grid.Column="0"
+                                  Spacing="2">
+                        <TextBlock Text="Case ID"
+                                  FontSize="11"
+                                  Foreground="#8FA9AA" />
+                        <TextBlock x:Name="CaseSummaryIdText"
+                                  Text="(no case yet)"
+                                  FontSize="13"
+                                  Foreground="#C7D4D4"
+                                  TextWrapping="Wrap" />
+                      </StackPanel>
 
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="Host"
-                                    FontSize="11"
-                                    Foreground="#8FA9AA" />
-                          <TextBlock x:Name="CaseSummaryHostText"
-                                    Text="(host)"
-                                    FontSize="13"
-                                    Foreground="#C7D4D4" />
-                        </StackPanel>
+                      <!-- Host -->
+                      <StackPanel Grid.Column="1"
+                                  Spacing="2">
+                        <TextBlock Text="Host"
+                                  FontSize="11"
+                                  Foreground="#8FA9AA" />
+                        <TextBlock x:Name="CaseSummaryHostText"
+                                  Text="(host)"
+                                  FontSize="13"
+                                  Foreground="#C7D4D4" />
+                      </StackPanel>
 
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="User"
-                                    FontSize="11"
-                                    Foreground="#8FA9AA" />
-                          <TextBlock x:Name="CaseSummaryUserText"
-                                    Text="(user)"
-                                    FontSize="13"
-                                    Foreground="#C7D4D4" />
-                        </StackPanel>
+                      <!-- User -->
+                      <StackPanel Grid.Column="2"
+                                  Spacing="2">
+                        <TextBlock Text="User"
+                                  FontSize="11"
+                                  Foreground="#8FA9AA" />
+                        <TextBlock x:Name="CaseSummaryUserText"
+                                  Text="(user)"
+                                  FontSize="13"
+                                  Foreground="#C7D4D4" />
+                      </StackPanel>
 
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="Started"
-                                    FontSize="11"
-                                    Foreground="#8FA9AA" />
-                          <TextBlock x:Name="CaseSummaryStartedText"
-                                    Text="(time)"
-                                    FontSize="13"
-                                    Foreground="#C7D4D4" />
-                        </StackPanel>
-                      </Grid>
+                      <!-- Started -->
+                      <StackPanel Grid.Column="3"
+                                  Spacing="2">
+                        <TextBlock Text="Started"
+                                  FontSize="11"
+                                  Foreground="#8FA9AA" />
+                        <TextBlock x:Name="CaseSummaryStartedText"
+                                  Text="(time)"
+                                  FontSize="13"
+                                  Foreground="#C7D4D4" />
+                      </StackPanel>
+                    </Grid>
 
                       <!-- BUTTONS -->
                       <StackPanel Orientation="Horizontal"
