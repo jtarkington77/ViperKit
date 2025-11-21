@@ -230,7 +230,16 @@ public partial class MainWindow
             }
         }
 
-        // 4) Text search across name / path / source / reason
+        // 4) Global case focus – follow a specific file/service/task across tabs
+        source = source.Where(p =>
+            MatchesCaseFocus(
+                p.Name,
+                p.Path,
+                p.RegistryPath,
+                p.Source,
+                p.LocationType));
+
+        // 5) Text search across name / path / source / reason
         string? term = PersistSearchTextBox?.Text;
         if (!string.IsNullOrWhiteSpace(term))
         {

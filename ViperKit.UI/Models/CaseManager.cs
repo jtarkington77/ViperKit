@@ -105,5 +105,24 @@ namespace ViperKit.UI.Models
                 return fullPath;
             }
         }
+
+        public static string FocusTarget { get; private set; } = string.Empty;
+
+        public static void SetFocusTarget(string? value, string sourceTab = "System")
+        {
+            lock (_lock)
+            {
+                FocusTarget = (value ?? string.Empty).Trim();
+
+                AddEvent(
+                    tab: sourceTab,
+                    action: "Focus target updated",
+                    severity: "INFO",
+                    target: string.IsNullOrEmpty(FocusTarget) ? "(none)" : FocusTarget,
+                    details: string.IsNullOrEmpty(FocusTarget)
+                        ? "Case focus cleared."
+                        : "Case focus set for cross-tab filtering (Hunt, Persist, Sweep, Cleanup).");
+            }
+        }
     }
 }

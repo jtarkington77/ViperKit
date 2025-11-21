@@ -147,6 +147,79 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CaseFocusSetButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        // Look up controls by name instead of using generated fields
+        var focusBox    = this.FindControl<TextBox>("CaseFocusTextBox");
+        var statusBlock = this.FindControl<TextBlock>("CaseFocusStatusText");
+
+        var value = focusBox?.Text ?? string.Empty;
+
+        CaseManager.SetFocusTarget(value, "Case");
+
+        if (statusBlock != null)
+        {
+            statusBlock.Text = string.IsNullOrWhiteSpace(value)
+                ? "Focus: (none)"
+                : $"Focus: {value}";
+        }
+
+        // Refresh Persist tab – it already calls MatchesCaseFocus in BindPersistResults
+        BindPersistResults();
+    }
+
+    private void CaseFocusClearButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        // Look up controls by name instead of using generated fields
+        var focusBox    = this.FindControl<TextBox>("CaseFocusTextBox");
+        var statusBlock = this.FindControl<TextBlock>("CaseFocusStatusText");
+
+        CaseManager.SetFocusTarget(string.Empty, "Case");
+
+        if (focusBox != null)
+            focusBox.Text = string.Empty;
+
+        if (statusBlock != null)
+            statusBlock.Text = "Focus: (none)";
+
+        BindPersistResults();
+    }
+
+    private void HuntSetCaseFocusButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        // Take whatever the analyst typed as the thing they “stopped”
+        var value = HuntIocInput?.Text ?? string.Empty;
+
+        // Record it into the shared case focus
+        CaseManager.SetFocusTarget(value, "Hunt");
+
+        // Mirror it into the Case tab UI if those controls exist
+        if (CaseFocusTextBox != null)
+            CaseFocusTextBox.Text = value;
+
+        if (CaseFocusStatusText != null)
+        {
+            CaseFocusStatusText.Text = string.IsNullOrWhiteSpace(value)
+                ? "Focus: (none)"
+                : $"Focus: {value}";
+        }
+
+        // Refresh the rest of the app so Persist/Sweep can start honoring the focus
+        try
+        {
+            PopulateDashboardSystemSnapshot();
+            UpdateDashboardCaseSummary();
+
+            // These are in the other partials; if they exist, this will compile fine.
+            BindPersistResults();
+            BindSweepResults();
+        }
+        catch
+        {
+            // We never want a focus change to crash the UI
+        }
+    }
+
 
     private static string GetFriendlyOsLabel()
     {
@@ -172,4 +245,28 @@ public partial class MainWindow : Window
             return RuntimeInformation.OSDescription;
         }
     }
+
+    // Returns true if there's no focus set, or if any of the provided fields match it.
+    private static bool MatchesCaseFocus(params string?[] fields)
+    {
+        var focus = CaseManager.FocusTarget;
+        if (string.IsNullOrWhiteSpace(focus))
+            return true; // no focus → don't filter anything
+
+        focus = focus.Trim();
+        var focusLower = focus.ToLowerInvariant();
+
+        foreach (var field in fields)
+        {
+            if (string.IsNullOrWhiteSpace(field))
+                continue;
+
+            var lower = field.ToLowerInvariant();
+            if (lower.Contains(focusLower))
+                return true;
+        }
+
+        return false;
+    }
 }
+

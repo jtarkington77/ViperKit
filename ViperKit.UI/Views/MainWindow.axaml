@@ -153,33 +153,50 @@
                   <Border Background="#0B1518" Padding="16">
                     <StackPanel Orientation="Vertical" Spacing="8">
 
+                            <TextBlock Text="Step 1 – Hunt the thing you stopped"
+                                        FontSize="16"
+                                        FontWeight="SemiBold"
+                                        Foreground="#EAF7F7"
+                                        Margin="0,0,0,4" />
+
+                              <TextBlock Text="Start from the process, tool, or file you killed or removed. We’ll carry that forward into Persist and Sweep as the case focus."
+                                        FontSize="12"
+                                        Foreground="#8FA9AA"
+                                        TextWrapping="Wrap"
+                                        Margin="0,0,0,8" />
                       <!-- 5-row grid: IOC, status, scope, buttons, text results -->
                       <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
 
-                        <!-- IOC input + type + run -->
-                        <StackPanel Grid.Row="0"
-                                    Orientation="Horizontal"
-                                    Spacing="8">
-                          <TextBox x:Name="HuntIocInput"
-                                   Width="420"
-                                   Watermark="Paste path, hash, domain, IP, registry key..." />
+                              <!-- IOC input + type + run -->
+                              <StackPanel Grid.Row="0"
+                                          Orientation="Horizontal"
+                                          Spacing="8">
+                                <TextBox x:Name="HuntIocInput"
+                                        Width="420"
+                                        Watermark="Paste path, hash, domain, IP, registry key..." />
 
-                          <ComboBox x:Name="HuntIocType"
-                                    Width="170">
-                            <ComboBoxItem Content="Auto"      />
-                            <ComboBoxItem Content="File path" />
-                            <ComboBoxItem Content="Hash"      />
-                            <ComboBoxItem Content="Domain/URL"/>
-                            <ComboBoxItem Content="IP address"/>
-                            <ComboBoxItem Content="Registry"  />
-                          </ComboBox>
+                                <ComboBox x:Name="HuntIocType"
+                                          Width="170">
+                                  <ComboBoxItem Content="Auto"      />
+                                  <ComboBoxItem Content="File path" />
+                                  <ComboBoxItem Content="Hash"      />
+                                  <ComboBoxItem Content="Domain/URL"/>
+                                  <ComboBoxItem Content="IP address"/>
+                                  <ComboBoxItem Content="Registry"  />
+                                </ComboBox>
 
-                          <Button x:Name="HuntRunButton"
-                                  Content="Run Hunt"
-                                  Width="110"
-                                  Click="HuntRunButton_OnClick" />
-                        </StackPanel>
+                                <Button x:Name="HuntRunButton"
+                                        Content="Run Hunt"
+                                        Width="110"
+                                        Click="HuntRunButton_OnClick" />
 
+                                <!-- NEW: push this IOC into case focus -->
+                                <Button x:Name="HuntSetCaseFocusButton"
+                                        Content="Set as case focus"
+                                        Width="150"
+                                        Click="HuntSetCaseFocusButton_OnClick" />
+                              </StackPanel>
+                              
                         <!-- Status line -->
                         <TextBlock x:Name="HuntStatusText"
                                    Grid.Row="1"
@@ -740,6 +757,30 @@
                                   Foreground="#C7D4D4" />
                       </StackPanel>
                     </Grid>
+
+                                          <!-- CASE FOCUS ROW -->
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="8"
+                                  Margin="0,12,0,0">
+                        <TextBlock Text="Case focus:"
+                                   VerticalAlignment="Center"
+                                   Foreground="#8FA9AA" />
+                        <TextBox x:Name="CaseFocusTextBox"
+                                 Width="260"
+                                 Watermark="File path, name, hash, etc." />
+                        <Button Content="Set"
+                                Width="70"
+                                Click="CaseFocusSetButton_OnClick" />
+                        <Button Content="Clear"
+                                Width="70"
+                                Click="CaseFocusClearButton_OnClick" />
+                        <TextBlock x:Name="CaseFocusStatusText"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#8FA9AA"
+                                   Text="Focus: (none)" />
+                      </StackPanel>
 
                       <!-- BUTTONS -->
                       <StackPanel Orientation="Horizontal"

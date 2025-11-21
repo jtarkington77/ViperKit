@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Security.Cryptography;
 using System.Diagnostics;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
@@ -30,7 +31,7 @@ public partial class MainWindow
     // HUNT TAB
     // =========================
 
-    private void HuntRunButton_OnClick(object? sender, RoutedEventArgs e)
+   private void HuntRunButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var iocText = HuntIocInput?.Text?.Trim() ?? string.Empty;
 
@@ -83,6 +84,10 @@ public partial class MainWindow
                 HandleHashHunt(iocText);
                 break;
 
+            case "NameKeyword":
+                HandleNameKeywordHunt(iocText);
+                break;
+
             default:
                 if (HuntResultsText != null)
                 {
@@ -105,7 +110,6 @@ public partial class MainWindow
         }
     }
 
-
     private static string DetermineIocType(string ioc, int selectedIndex)
     {
         // Respect explicit selection from dropdown
@@ -124,7 +128,8 @@ public partial class MainWindow
         string noSpaces = trimmed.Replace(" ", string.Empty);
 
         // Windows path (C:\ or \\server\share)
-        if (trimmed.Contains(@":\") || lowered.StartsWith(@"\\")) return "FilePath";
+        if (trimmed.Contains(@":\") || lowered.StartsWith(@"\\")) 
+            return "FilePath";
 
         // Registry-style
         if (lowered.StartsWith("hklm\\") ||
@@ -153,9 +158,31 @@ public partial class MainWindow
         if (noSpaces.Length >= 32 && noSpaces.Length <= 64 && IsHexString(noSpaces))
             return "Hash";
 
-        // Everything else → treat as Domain/URL
-        return "DomainOrUrl";
+        // Domain-ish: has a dot and letters on both sides (example.com, foo.bar)
+        var parts = noSpaces.Split('.');
+        if (parts.Length >= 2 &&
+            parts[0].Length > 0 &&
+            parts[^1].Length > 0 &&
+            ContainsLetter(parts[0]) &&
+            ContainsLetter(parts[^1]))
+        {
+            return "DomainOrUrl";
+        }
+
+        // Everything else → treat as name / keyword (ScreenConnect, AnyDesk, etc.)
+        return "NameKeyword";
     }
+
+    private static bool ContainsLetter(string value)
+    {
+        foreach (char c in value)
+        {
+            if (char.IsLetter(c))
+                return true;
+        }
+        return false;
+    }
+
 
     private static bool IsHexString(string value)
     {
@@ -443,7 +470,7 @@ public partial class MainWindow
         }
 
         sb.AppendLine();
-        sb.AppendLine("Future builds: correlate IP against threat intel feeds, geo, ASN, etc.");
+        sb.AppendLine("Next steps: if this IP looks suspicious, set it as case focus and pivot into Persist/Sweep to look for related services, tasks, and binaries.");
 
         if (HuntResultsText != null)
             HuntResultsText.Text = sb.ToString();
@@ -464,6 +491,174 @@ public partial class MainWindow
             HuntResultsList.ItemsSource = _huntResults.ToArray();
         }
     }
+
+    // ---- Name / keyword hunt (ScreenConnect, AnyDesk, etc.) ----
+    private void HandleNameKeywordHunt(string term)
+    {
+        string keyword = term?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            if (HuntResultsText != null)
+                HuntResultsText.Text = "Name / keyword IOC was empty.";
+            return;
+        }
+
+        string needle = keyword.ToLowerInvariant();
+        var sb = new StringBuilder();
+        sb.AppendLine($"Name / keyword hunt: {keyword}");
+        sb.AppendLine();
+
+        // 1) Processes
+        sb.AppendLine("Processes with matching name:");
+        bool anyProcess = false;
+
+        try
+        {
+            foreach (var proc in Process.GetProcesses())
+            {
+                string name = proc.ProcessName ?? string.Empty;
+                if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    anyProcess = true;
+                    sb.AppendLine($"  {name} (PID {proc.Id})");
+
+                    _huntResults.Add(new HuntResult
+                    {
+                        Category = "Process",
+                        Target   = $"{name} (PID {proc.Id})",
+                        Severity = "INFO",
+                        Summary  = "Matching process name",
+                        Details  = $"Process ID: {proc.Id}"
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  Error while enumerating processes: {ex.Message}");
+        }
+
+        if (!anyProcess)
+            sb.AppendLine("  (none found)");
+
+        // 2) Standard install locations: Program Files / Program Files (x86) / ProgramData
+        sb.AppendLine();
+        sb.AppendLine("Install folders containing the keyword (top-level):");
+
+        bool anyDirMatch = false;
+        string[] roots =
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) // ProgramData
+        };
+
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                continue;
+
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(root))
+                {
+                    string dirName = Path.GetFileName(dir);
+                    if (dirName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        anyDirMatch = true;
+                        sb.AppendLine($"  {dir}");
+
+                        _huntResults.Add(new HuntResult
+                        {
+                            Category = "File",
+                            Target   = dir,
+                            Severity = "INFO",
+                            Summary  = "Install folder name match",
+                            Details  = $"Top-level folder under {root}"
+                        });
+                    }
+                }
+            }
+            catch
+            {
+                // ignore unreadable roots
+            }
+        }
+
+        if (!anyDirMatch)
+            sb.AppendLine("  (none found in Program Files / ProgramData)");
+
+        // 3) Optional scope folder: file-name scan (e.g. point at C:\ or ProgramData)
+        string? scopeFolder = HuntScopeFolderInput?.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(scopeFolder) && Directory.Exists(scopeFolder))
+        {
+            const int MaxFilesToScan = 4000;
+            int filesScanned = 0;
+            int matchCount   = 0;
+            bool limitHit    = false;
+
+            sb.AppendLine();
+            sb.AppendLine($"Scope folder file-name scan: {scopeFolder}");
+            sb.AppendLine($"Max files to scan this run: {MaxFilesToScan}");
+
+            try
+            {
+                if (HuntStatusText != null)
+                    HuntStatusText.Text = "Status: keyword disk scan running.";
+
+                foreach (var file in EnumerateFilesSafe(scopeFolder))
+                {
+                    if (filesScanned >= MaxFilesToScan)
+                    {
+                        limitHit = true;
+                        break;
+                    }
+
+                    filesScanned++;
+
+                    string fileName = Path.GetFileName(file);
+                    if (fileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matchCount++;
+                        sb.AppendLine($"  {file}");
+
+                        _huntResults.Add(new HuntResult
+                        {
+                            Category = "File",
+                            Target   = file,
+                            Severity = "INFO",
+                            Summary  = "File name match",
+                            Details  = $"Found under scope folder {scopeFolder}"
+                        });
+                    }
+                }
+
+                sb.AppendLine();
+                sb.AppendLine($"Files scanned: {filesScanned}");
+                sb.AppendLine($"Name matches: {matchCount}");
+                if (limitHit)
+                    sb.AppendLine("File scan limit hit; narrow your scope for deeper sweeps.");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"Error while scanning scope folder: {ex.Message}");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Next steps: set this as the case focus, then pivot into Persist to hunt autoruns/services and into Sweep to collect related files and tasks.");
+
+        if (HuntResultsText != null)
+            HuntResultsText.Text = sb.ToString();
+
+        if (HuntResultsList != null)
+        {
+            HuntResultsList.ItemsSource = null;
+            HuntResultsList.ItemsSource = _huntResults.ToArray();
+        }
+    }
+
 
 
     // ---- Domain / URL hunt ----
@@ -1027,7 +1222,7 @@ public partial class MainWindow
         }
 
         sb.AppendLine();
-        sb.AppendLine("Future builds: pivot hash into VT/OSINT, correlate across hosts/files, etc.");
+        sb.AppendLine("Next steps: use any matching files as the case focus and follow them through Persist (autoruns/services) and Sweep (other copies, installers, droppers).");
 
         if (HuntResultsText != null)
             HuntResultsText.Text = sb.ToString();
