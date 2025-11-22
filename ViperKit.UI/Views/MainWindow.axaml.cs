@@ -249,7 +249,9 @@ public partial class MainWindow : Window
     // Returns true if there's no focus set, or if any of the provided fields match it.
     private static bool MatchesCaseFocus(params string?[] fields)
     {
-        var focus = CaseManager.FocusTarget;
+        var focusList = CaseManager.GetFocusTargets();
+        var focus = focusList.Count > 0 ? string.Join(", ", focusList) : "(none)";
+
         if (string.IsNullOrWhiteSpace(focus))
             return true; // no focus → don't filter anything
 

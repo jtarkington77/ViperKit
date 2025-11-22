@@ -340,50 +340,55 @@
                                   TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!-- Filters row -->
-                    <StackPanel Grid.Row="1"
-                                Orientation="Horizontal"
-                                Spacing="12"
-                                Margin="0,12,0,8">
-                        <CheckBox x:Name="PersistShowCheckOnlyCheckBox"
-                                  Content="Show only CHECK entries"
-                                  Click="PersistFilterCheckBox_OnChanged"
-                                  VerticalAlignment="Center" />
-                        <CheckBox x:Name="PersistApplyFocusFilterCheckBox"
-                                  Content="Filter by case focus"
-                                  Margin="12,0,0,0"
-                                  VerticalAlignment="Center"
-                                  Foreground="#8FA9AA"
-                                  IsChecked="False"
-                                  Checked="PersistFilterCheckBox_OnChanged"
-                                  Unchecked="PersistFilterCheckBox_OnChanged" />
-                        <!-- NEW: risk / triage mode -->
-                        <ComboBox x:Name="PersistRiskFilterCombo"
-                                  Width="170"
-                                  SelectedIndex="0"
-                                  SelectionChanged="PersistRiskFilterCombo_OnSelectionChanged">
-                            <ComboBoxItem>All severities</ComboBoxItem>
-                            <ComboBoxItem>High-signal hotspots</ComboBoxItem>
-                            <ComboBoxItem>CHECK only</ComboBoxItem>
-                            <ComboBoxItem>Notes &amp; OK</ComboBoxItem>
-                        </ComboBox>
+                   <!-- Filters row -->
+                  <StackPanel Grid.Row="1"
+                              Orientation="Horizontal"
+                              Spacing="12"
+                              Margin="0,12,0,8">
 
-                        <ComboBox x:Name="PersistLocationFilterCombo"
-                                  Width="180"
-                                  SelectionChanged="PersistLocationFilterCombo_OnSelectionChanged">
-                            <ComboBoxItem>All locations</ComboBoxItem>
-                            <ComboBoxItem>Registry autoruns</ComboBoxItem>
-                            <ComboBoxItem>Startup folders</ComboBoxItem>
-                            <ComboBoxItem>Services / drivers</ComboBoxItem>
-                            <ComboBoxItem>Scheduled tasks</ComboBoxItem>
-                        </ComboBox>
+                    <!-- Show only CHECK entries -->
+                    <CheckBox x:Name="PersistShowCheckOnlyCheckBox"
+                              Content="Show only 'CHECK' entries"
+                              VerticalAlignment="Center"
+                              Checked="PersistFilterCheckBox_OnChanged"
+                              Unchecked="PersistFilterCheckBox_OnChanged" />
 
-                        <TextBox x:Name="PersistSearchTextBox"
-                                Width="260"
-                                Watermark="Search name, path, source, reason..."
-                                TextChanged="PersistSearchTextBox_OnTextChanged" />
-                    </StackPanel>
+                    <!-- Filter by case focus -->
+                    <CheckBox x:Name="PersistFilterByFocusCheckBox"
+                              Content="Filter by case focus"
+                              Margin="12,0,0,0"
+                              VerticalAlignment="Center"
+                              Foreground="#8FA9AA"
+                              IsChecked="False"
+                              Checked="PersistFilterCheckBox_OnChanged"
+                              Unchecked="PersistFilterCheckBox_OnChanged" />
 
+                    <!-- NEW: risk / triage mode -->
+                    <ComboBox x:Name="PersistRiskFilterCombo"
+                              Width="170"
+                              SelectedIndex="0"
+                              SelectionChanged="PersistRiskFilterCombo_OnSelectionChanged">
+                      <ComboBoxItem>All severities</ComboBoxItem>
+                      <ComboBoxItem>High-signal hotspots</ComboBoxItem>
+                      <ComboBoxItem>CHECK only</ComboBoxItem>
+                      <ComboBoxItem>Notes &amp; OK</ComboBoxItem>
+                    </ComboBox>
+
+                    <ComboBox x:Name="PersistLocationFilterCombo"
+                              Width="180"
+                              SelectionChanged="PersistLocationFilterCombo_OnSelectionChanged">
+                      <ComboBoxItem>All locations</ComboBoxItem>
+                      <ComboBoxItem>Registry autoruns</ComboBoxItem>
+                      <ComboBoxItem>Startup folders</ComboBoxItem>
+                      <ComboBoxItem>Services / drivers</ComboBoxItem>
+                      <ComboBoxItem>Scheduled tasks</ComboBoxItem>
+                    </ComboBox>
+
+                    <TextBox x:Name="PersistSearchTextBox"
+                            Width="260"
+                            Watermark="Search name, path, source, reason..."
+                            TextChanged="PersistSearchTextBox_OnTextChanged" />
+                  </StackPanel>
 
                     <!-- Results + detail -->
                     <Grid Grid.Row="2"
@@ -813,8 +818,10 @@
                       <Border Margin="0,12,0,0"
                               Background="#050E10"
                               Padding="8">
-                        <ListBox x:Name="CaseEventsList"
-                                BorderThickness="0">
+                          <ListBox x:Name="CaseEventsList"
+                                  BorderThickness="0"
+                                  Height="760"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
                           <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:CaseEvent">
                               <StackPanel Margin="0,4" Spacing="2">
