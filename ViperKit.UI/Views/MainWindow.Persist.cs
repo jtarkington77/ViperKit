@@ -66,7 +66,7 @@ public partial class MainWindow
             if (PersistStatusText != null)
             {
                 PersistStatusText.Text =
-                    $"Status: found {_persistItems.Count} persistence entry/entries; " +
+                    $"Status: found {_persistItems.Count} persistence entries; " +
                     $"{flaggedCount} marked 'CHECK'; {hotspotCount} high-signal hotspot(s).";
             }
 
@@ -159,18 +159,19 @@ public partial class MainWindow
     }
 
 
-    // Central place to apply all Persist filters
+   // Central place to apply all Persist filters
     private void BindPersistResults()
     {
         if (PersistResultsList == null)
             return;
 
-        IEnumerable<PersistItem> source = _persistItems;
+        // Start from the full set
+        IEnumerable<PersistItem> baseQuery = _persistItems;
 
         // 1) "Show only CHECK" checkbox
         if (PersistShowCheckOnlyCheckBox?.IsChecked == true)
         {
-            source = source.Where(p =>
+            baseQuery = baseQuery.Where(p =>
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
         }
 
@@ -180,19 +181,19 @@ public partial class MainWindow
             switch (PersistLocationFilterCombo.SelectedIndex)
             {
                 case 1: // Registry autoruns
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.LocationType.StartsWith("Autorun (Registry",
                             StringComparison.OrdinalIgnoreCase));
                     break;
 
                 case 2: // Startup folders
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.LocationType.StartsWith("Startup folder",
                             StringComparison.OrdinalIgnoreCase));
                     break;
 
                 case 3: // Services / drivers
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.LocationType.StartsWith("Service",
                             StringComparison.OrdinalIgnoreCase) ||
                         p.LocationType.StartsWith("Driver",
@@ -200,62 +201,73 @@ public partial class MainWindow
                     break;
 
                 case 4: // Scheduled tasks
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.LocationType.StartsWith("Scheduled task",
                             StringComparison.OrdinalIgnoreCase));
                     break;
             }
         }
 
-        // 3) NEW: risk / triage mode
+        // 3) Risk / triage mode (All severities / High-signal / CHECK / Notes&OK)
         if (PersistRiskFilterCombo != null)
         {
             switch (PersistRiskFilterCombo.SelectedIndex)
             {
                 case 1: // High-signal hotspots
-                    source = source.Where(IsHighSignalPersistItem);
+                    baseQuery = baseQuery.Where(IsHighSignalPersistItem);
                     break;
 
                 case 2: // CHECK only
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
                     break;
 
                 case 3: // Notes & OK
-                    source = source.Where(p =>
+                    baseQuery = baseQuery.Where(p =>
                         p.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase) ||
                         p.Risk.StartsWith("OK",   StringComparison.OrdinalIgnoreCase));
                     break;
-                // case 0 = All severities (no extra filter)
+                // 0 = All severities
             }
         }
 
-        // 4) Global case focus – follow a specific file/service/task across tabs
-        source = source.Where(p =>
-            MatchesCaseFocus(
-                p.Name,
-                p.Path,
-                p.RegistryPath,
-                p.Source,
-                p.LocationType));
-
-        // 5) Text search across name / path / source / reason
+        // 4) Text search across name / path / source / reason
         string? term = PersistSearchTextBox?.Text;
         if (!string.IsNullOrWhiteSpace(term))
         {
             term = term.Trim();
 
-            source = source.Where(p =>
+            baseQuery = baseQuery.Where(p =>
                 (!string.IsNullOrEmpty(p.Name)   && p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
                 (!string.IsNullOrEmpty(p.Path)   && p.Path.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
                 (!string.IsNullOrEmpty(p.Source) && p.Source.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
                 (!string.IsNullOrEmpty(p.Reason) && p.Reason.Contains(term, StringComparison.OrdinalIgnoreCase)));
         }
 
-        PersistResultsList.ItemsSource = source.ToList();
+        // 5) Optional case-focus filter (toggled by a checkbox)
+        bool applyFocusFilter = PersistApplyFocusFilterCheckBox?.IsChecked == true;
+        var focusTargets      = CaseManager.GetFocusTargets();
+
+        if (applyFocusFilter && focusTargets.Count > 0)
+        {
+            baseQuery = baseQuery.Where(p => PersistMatchesCaseFocus(p, focusTargets));
+        }
+
+        var finalList = baseQuery.ToList();
+
+        // If we *asked* for focus-filtered results and got nothing, say that loudly
+        if (applyFocusFilter &&
+            focusTargets.Count > 0 &&
+            finalList.Count == 0 &&
+            _persistItems.Count > 0 &&
+            PersistStatusText != null)
+        {
+            PersistStatusText.Text =
+                "Status: no persistence hits for current case focus – run Sweep and add related items to focus.";
+        }
+
+        PersistResultsList.ItemsSource = finalList;
     }
-
-
 
 
     // Checkbox toggled
@@ -1300,6 +1312,34 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         }
     }
 
+    private void PersistSetFocusButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var selected = GetSelectedPersistItem();
+        if (selected == null)
+            return;
+
+        // Prefer the file path if we have one
+        var focus = selected.Path;
+
+        // Fallbacks if Path is empty for some reason
+        if (string.IsNullOrWhiteSpace(focus))
+            focus = !string.IsNullOrWhiteSpace(selected.Name)
+                ? selected.Name
+                : selected.Source;
+
+        if (string.IsNullOrWhiteSpace(focus))
+            return;
+
+        // Update global case focus
+        CaseManager.SetFocusTarget(focus, "Persist");
+
+        // Re-bind so MatchesFocus highlighting / filters update
+        BindPersistResults();
+
+        if (PersistStatusText != null)
+            PersistStatusText.Text = "Status: case focus updated from Persist.";
+    }
+
     private void PersistAddToCaseButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var item = PersistResultsList?.SelectedItem as PersistItem;
@@ -1447,6 +1487,45 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         return false;
     }
 
+    private static bool PersistMatchesCaseFocus(PersistItem item, IReadOnlyList<string> focusTargets)
+    {
+        if (item == null || focusTargets == null || focusTargets.Count == 0)
+            return false;
+
+        // These are the fields we look at when we say "is this tied to the tool I'm hunting?"
+        string[] fields =
+        {
+            item.Name         ?? string.Empty,
+            item.Path         ?? string.Empty,
+            item.RegistryPath ?? string.Empty,
+            item.Source       ?? string.Empty,
+            item.LocationType ?? string.Empty,
+            item.Reason       ?? string.Empty
+        };
+
+        foreach (var rawToken in focusTargets)
+        {
+            if (string.IsNullOrWhiteSpace(rawToken))
+                continue;
+
+            string token = rawToken.Trim().ToLowerInvariant();
+            if (token.Length == 0)
+                continue;
+
+            foreach (var field in fields)
+            {
+                if (field.Length == 0)
+                    continue;
+
+                if (field.ToLowerInvariant().Contains(token))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+
     // -----------------------------------------
     // Utility helpers
     // -----------------------------------------
@@ -1559,5 +1638,10 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         // 5) Everything else: treat as NOT suspicious for now (we were way too aggressive before)
         return false;
     }
-    
+
+    // Utility: return the currently selected PersistItem in the list
+    private PersistItem? GetSelectedPersistItem()
+    {
+        return PersistResultsList?.SelectedItem as PersistItem;
+    }  
 }

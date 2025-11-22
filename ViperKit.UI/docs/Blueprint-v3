@@ -1,0 +1,290 @@
+1. What “case focus” actually is
+
+Think of case focus as a global list of tags for this investigation, not a single string.
+
+Examples of focus items you might accumulate during a case:
+
+ConnectWiseControl.Client.exe
+
+ScreenConnect Client
+
+LogMeIn
+
+powershell.exe
+
+C:\Program Files\EasyHelp\agent.exe
+
+Those get added over time from any tab:
+
+From Hunt: you find ConnectWiseControl.Client.exe → “Add to focus”.
+
+From Sweep: you see a folder C:\ProgramData\ScreenConnect Client (a776d…) created at the same time → “Add to focus”.
+
+From Persist: you see a sketchy autorun → “Add to focus”.
+
+Behind the scenes, CaseManager is holding a list like:
+
+FocusTargets = [
+  "ConnectWiseControl",
+  "LogMeIn",
+  "EasyHelp"
+]
+
+
+🔑 Key point: Focus is additive for the whole case. New finds from Hunt/Sweep/Persist get appended; nothing gets blown away unless you start a new case or explicitly clear them.
+
+2. How filtering should work in Persist (the part that’s pissing you off)
+
+Persist must always be able to:
+
+Show all persistence for the machine.
+
+Show only items related to focus.
+
+Show only items for a specific tool (e.g., just ConnectWise, just LogMeIn).
+
+Show items for any of the focus tools combined (ConnectWise + LogMeIn + EasyHelp, etc.).
+
+So Persist gets its own Focus dropdown (in addition to the existing filters):
+
+Focus filter dropdown (Persist tab)
+Options:
+
+All items (ignore focus)
+
+Any focus target (union of everything in the focus list)
+
+One entry per focus item, e.g.:
+
+ConnectWiseControl
+
+LogMeIn
+
+EasyHelp
+
+How that behaves
+
+Assume you’ve got 692 persistence entries total.
+
+Mode 1 – All items (ignore focus)
+
+Persist shows all 692 entries, filtered only by:
+
+CHECK only checkbox
+
+Location filter
+
+Risk filter
+
+Text search
+
+Case focus is not applied at all in this mode.
+
+Mode 2 – Any focus target
+
+Start from those 692 (after the normal filters).
+
+Keep entries where Name / Path / RegistryPath / Source / LocationType contains any of the focus strings.
+
+If that yields matches → show them.
+
+If that yields zero:
+
+You still show the normal filtered results (so you’re not staring at a blank list).
+
+Status bar says something like:
+
+Status: no persistence entries matched current focus; showing all filtered results.
+
+Case log gets an event “Persist – no entries matched focus (ConnectWise, LogMeIn, …)”.
+
+Mode 3 – Single focus target (e.g. “ConnectWiseControl”)
+
+Same idea, but only for that one string.
+
+You can flip between:
+
+All items
+
+Any focus target
+
+ConnectWiseControl
+
+LogMeIn
+
+etc.
+
+If single-focus filter yields zero:
+
+Again, you fall back to showing the normal filtered list, not an empty screen.
+
+Status text:
+
+Status: no persistence entries for focus “ConnectWiseControl”; showing all filtered results.
+
+🔑 Key point:
+
+Persist always shows something unless the base filters themselves produce zero.
+
+Focus never silently nukes the list. It’s a “try to narrow to this; if nothing, tell me and show everything anyway” filter.
+
+3. How you add focus items over time (the workflow you described)
+Step 1 – Hunt
+
+Run Hunt on ScreenConnect.Client.exe, ConnectWiseControl.Client.exe, etc.
+
+You see your hits in the Hunt tab.
+
+You click “Set case focus” / “Add to focus” on a hit.
+
+CaseManager.FocusTargets now contains "ConnectWiseControl.Client.exe" (or a cleaned-up token like "ConnectWiseControl").
+
+Step 2 – Persist (first pass)
+
+Go to Persist.
+
+Run Persist → it always scans all known persistence locations (Run keys, Startup, Services, Tasks, Winlogon, IFEO, AppInit).
+
+Set Focus filter to:
+
+Any focus target OR
+
+ConnectWiseControl specifically.
+
+If there is persistence for that tool:
+
+You see only those entries (plus any other normal filters you choose).
+
+If there is no persistence for that tool:
+
+You get:
+
+Status: No persistence entries matched this focus; showing all filtered results.
+
+A populated list, so you can still see everything else.
+
+This is where your “no persistence found – go run Sweep” hint comes in.
+
+Step 3 – Sweep (finding related stuff by time / artifacts)
+
+Run Sweep around the time of infection.
+
+You see:
+
+New folders
+
+Recently touched EXEs
+
+ProgramData directories
+
+etc.
+
+When you see something suspicious that looks tied to the incident (e.g. C:\ProgramData\ScreenConnect Client (8aef…), some weird EXE in AppData):
+
+Click “Add to focus” on those items.
+
+CaseManager.FocusTargets now might be:
+
+[
+  "ConnectWiseControl",
+  "ScreenConnect Client (8aef…)",
+  "some-suspicious-folder"
+]
+
+Step 4 – Persist (second pass with new focus)
+
+Back to Persist:
+
+Focus filter = Any focus target → see anything tied to any of those artifacts.
+
+Or pick one specific one from the dropdown to isolate it:
+
+ConnectWiseControl
+
+ScreenConnect Client (8aef…)
+
+If still nothing for those → explicit status message + log that “no persistence entries match the current focus”.
+
+🔑 Key point:
+You don’t lose previously added focus items. You can keep stacking:
+
+ConnectWise
+
+LogMeIn
+
+EasyHelp
+etc., and flip between:
+
+Just ConnectWise
+
+Just LogMeIn
+
+All focus items combined
+
+Or “All items” to ignore focus completely.
+
+4. What about multiple tools on the same box?
+
+Your example:
+
+“if there is connectwise and logmein i should be able to filter by just connectwise, just logmein, both of them, or the same way we have filter now if i want to look at all items.”
+
+With the design above:
+
+All items (ignore focus) = “show everything, like today”.
+
+Any focus target = “show both ConnectWise + LogMeIn + any other focused tools”.
+
+ConnectWise = “just ConnectWise”.
+
+LogMeIn = “just LogMeIn”.
+
+So you get exactly those four views:
+
+All entries.
+
+Only entries for any focus tool (union).
+
+Only entries for ConnectWise.
+
+Only entries for LogMeIn.
+
+5. Tying it to your “real world” workflow
+
+“THINK OF THE FUCKING WORKFLOW OF CLEANING A FUCKING MACHINE…”
+
+This is what the final behavior supports:
+
+Hunt: find obviously-bad binaries / folders / processes → add focus.
+
+Persist: see which of those have true persistence entries (services, autoruns, scheduled tasks, Winlogon, IFEO, etc.).
+
+If none → UI tells you that and suggests you run Sweep.
+
+Sweep: look for “sibling” artifacts:
+
+Same timestamp windows.
+
+Same parent directories.
+
+Other EXEs/DLLs created at same time.
+
+Add those to focus.
+
+Back to Persist: now you’re hunting for persistence tied to the ripple of that infection, not just the original binary.
+
+Once you’re satisfied you’ve killed persistence, you can log everything out of the case and move to Cleanup.
+
+If this behavior matches what you’ve got in your head:
+
+Next step I’ll give you very small, surgical changes:
+
+CaseManager: add a list of focus targets instead of a single string, plus AddFocusTarget, GetFocusTargets, and ClearFocusTargets.
+
+Hunt / Sweep / Persist: change “Set case focus” to append instead of overwrite.
+
+Persist: wire a Focus dropdown that uses those targets, with the exact fallback behavior described above.
+
+No guessing, no “look for a method that doesn’t exist” crap — literally “paste this block under X”, “replace method Y with this exact text”, step by step.
+
+But the big question first is just: does this match

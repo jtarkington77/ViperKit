@@ -349,7 +349,14 @@
                                   Content="Show only CHECK entries"
                                   Click="PersistFilterCheckBox_OnChanged"
                                   VerticalAlignment="Center" />
-
+                        <CheckBox x:Name="PersistApplyFocusFilterCheckBox"
+                                  Content="Filter by case focus"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  Foreground="#8FA9AA"
+                                  IsChecked="False"
+                                  Checked="PersistFilterCheckBox_OnChanged"
+                                  Unchecked="PersistFilterCheckBox_OnChanged" />
                         <!-- NEW: risk / triage mode -->
                         <ComboBox x:Name="PersistRiskFilterCombo"
                                   Width="170"
@@ -518,11 +525,19 @@
                                 Content="Add selected to case"
                                 MinWidth="170"
                                 Click="PersistAddToCaseButton_OnClick" />
+
+                        <!-- NEW: set case focus from Persist -->
+                        <Button x:Name="PersistSetFocusButton"
+                                Content="Set as case focus"
+                                MinWidth="150"
+                                Click="PersistSetFocusButton_OnClick" />
+
                         <Button x:Name="PersistOpenSelectedButton"
                                 Content="Investigate selected"
                                 Click="PersistOpenSelectedButton_OnClick"
                                 MinWidth="150" />
                     </StackPanel>
+
                 </Grid>
             </TabItem>
 
