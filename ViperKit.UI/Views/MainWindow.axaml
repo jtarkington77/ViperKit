@@ -317,6 +317,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <!-- Header / Run -->
@@ -597,8 +598,306 @@
 
                     </Grid>
 
+                    <!-- PowerShell History Section -->
+                    <Expander Grid.Row="4"
+                              Header="PowerShell History Analysis"
+                              Margin="0,8,0,0"
+                              IsExpanded="False">
+                      <Border Background="#0A1214"
+                              CornerRadius="6"
+                              Padding="12"
+                              Margin="0,8,0,0"
+                              BorderBrush="#1A3C3F"
+                              BorderThickness="1">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,200,Auto">
+
+                          <!-- PS History Header / Scan Button -->
+                          <StackPanel Grid.Row="0"
+                                      Orientation="Horizontal"
+                                      Spacing="8">
+                            <Button x:Name="PSHistoryScanButton"
+                                    Content="Scan PowerShell History"
+                                    Click="PSHistoryScanButton_OnClick"
+                                    MinWidth="180" />
+                            <TextBlock x:Name="PSHistoryStatusText"
+                                      Text="Status: idle."
+                                      VerticalAlignment="Center"
+                                      Foreground="#8FA9AA" />
+                          </StackPanel>
+
+                          <!-- PS History Summary Panel -->
+                          <StackPanel Grid.Row="1"
+                                      Orientation="Horizontal"
+                                      Spacing="16"
+                                      Margin="0,12,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#5A1E2C" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryHighCount"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#FF9999" />
+                              </Border>
+                              <TextBlock Text="HIGH"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#4A3D16" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryMediumCount"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#FFCC66" />
+                              </Border>
+                              <TextBlock Text="MEDIUM"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#1E3D2A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryLowCount"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#99CC99" />
+                              </Border>
+                              <TextBlock Text="LOW"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <Border Background="#222" Width="1" Height="20" VerticalAlignment="Center" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#1A2A4A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryPS51Count"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#88AADD" />
+                              </Border>
+                              <TextBlock Text="PS 5.1"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#1A4A2A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryPS7Count"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#88DDAA" />
+                              </Border>
+                              <TextBlock Text="PS 7"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <Border Background="#222" Width="1" Height="20" VerticalAlignment="Center" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Background="#2A3A5A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                <TextBlock x:Name="PSHistoryUsersCount"
+                                          Text="0"
+                                          FontWeight="Bold"
+                                          HorizontalAlignment="Center"
+                                          Foreground="#99CCFF" />
+                              </Border>
+                              <TextBlock Text="Users"
+                                        VerticalAlignment="Center"
+                                        Foreground="#C7D4D4" />
+                            </StackPanel>
+                          </StackPanel>
+
+                          <!-- PS History Filters Row 1 -->
+                          <StackPanel Grid.Row="2"
+                                      Orientation="Horizontal"
+                                      Spacing="10"
+                                      Margin="0,12,0,4">
+                            <CheckBox x:Name="PSHistoryShowSuspiciousCheckBox"
+                                      Content="Suspicious only"
+                                      IsChecked="True"
+                                      Checked="PSHistoryFilterChanged"
+                                      Unchecked="PSHistoryFilterChanged" />
+
+                            <ComboBox x:Name="PSHistoryVersionFilterCombo"
+                                      Width="130"
+                                      SelectedIndex="0"
+                                      SelectionChanged="PSHistoryVersionFilterCombo_OnSelectionChanged">
+                              <ComboBoxItem>All Versions</ComboBoxItem>
+                              <ComboBoxItem>PowerShell 5.1</ComboBoxItem>
+                              <ComboBoxItem>PowerShell 7</ComboBoxItem>
+                            </ComboBox>
+
+                            <ComboBox x:Name="PSHistorySeverityFilterCombo"
+                                      Width="120"
+                                      SelectedIndex="0"
+                                      SelectionChanged="PSHistorySeverityFilterCombo_OnSelectionChanged">
+                              <ComboBoxItem>All Severities</ComboBoxItem>
+                              <ComboBoxItem>HIGH only</ComboBoxItem>
+                              <ComboBoxItem>MEDIUM only</ComboBoxItem>
+                              <ComboBoxItem>LOW only</ComboBoxItem>
+                            </ComboBox>
+
+                            <ComboBox x:Name="PSHistoryUserFilterCombo"
+                                      Width="120"
+                                      SelectedIndex="0"
+                                      SelectionChanged="PSHistoryUserFilterCombo_OnSelectionChanged">
+                              <ComboBoxItem>All Users</ComboBoxItem>
+                            </ComboBox>
+
+                            <ComboBox x:Name="PSHistoryRecencyFilterCombo"
+                                      Width="130"
+                                      SelectedIndex="0"
+                                      SelectionChanged="PSHistoryRecencyFilterCombo_OnSelectionChanged">
+                              <ComboBoxItem>All Commands</ComboBoxItem>
+                              <ComboBoxItem>Last 100</ComboBoxItem>
+                              <ComboBoxItem>Last 500</ComboBoxItem>
+                              <ComboBoxItem>Last 1000</ComboBoxItem>
+                              <ComboBoxItem>Recent (last 10%)</ComboBoxItem>
+                            </ComboBox>
+
+                            <TextBox x:Name="PSHistorySearchBox"
+                                    Width="180"
+                                    Watermark="Search commands..."
+                                    TextChanged="PSHistorySearchBox_OnTextChanged" />
+
+                            <TextBlock x:Name="PSHistoryFilterStatus"
+                                      Text=""
+                                      VerticalAlignment="Center"
+                                      Foreground="#8FA9AA"
+                                      FontSize="11" />
+                          </StackPanel>
+
+                          <!-- PS History Tip -->
+                          <TextBlock Grid.Row="3"
+                                    Text="Note: PSReadLine history doesn't store timestamps per command. 'File modified' shows when PowerShell was last used. Line position indicates recency (higher = more recent). Use 'Last N' filter to focus on recent commands."
+                                    FontSize="11"
+                                    Foreground="#6A8A8B"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,8" />
+
+                          <!-- PS History Results List -->
+                          <ListBox Grid.Row="4"
+                                  x:Name="PSHistoryResultsList"
+                                  Background="#05090A">
+                            <ListBox.ItemTemplate>
+                              <DataTemplate x:DataType="models:PowerShellHistoryEntry">
+                                <Border Padding="8"
+                                        Margin="0,0,0,4"
+                                        CornerRadius="4"
+                                        Background="#0A1418"
+                                        BorderThickness="{Binding BorderThickness}"
+                                        BorderBrush="{Binding BorderBrush}">
+                                  <StackPanel Spacing="4">
+                                    <!-- Top line: Severity + User + PS Version + Position + Date -->
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                        <Border Padding="6,2"
+                                                CornerRadius="3"
+                                                Background="{Binding SeverityBackground}">
+                                          <TextBlock Text="{Binding Severity}"
+                                                    FontSize="10"
+                                                    FontWeight="Bold"
+                                                    Foreground="{Binding SeverityForeground}" />
+                                        </Border>
+                                        <TextBlock Text="{Binding SourceLabel}"
+                                                  FontSize="11"
+                                                  Foreground="#8FA9AA"
+                                                  VerticalAlignment="Center" />
+                                        <Border Padding="4,2"
+                                                CornerRadius="3"
+                                                Background="#1A2A3A">
+                                          <TextBlock Text="{Binding RecencyLabel}"
+                                                    FontSize="9"
+                                                    Foreground="#7799BB" />
+                                        </Border>
+                                      </StackPanel>
+                                      <TextBlock Grid.Column="2"
+                                                Text="{Binding PositionLabel}"
+                                                FontSize="10"
+                                                Foreground="#667788"
+                                                VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <!-- Command -->
+                                    <TextBlock Text="{Binding CommandPreview}"
+                                              FontSize="12"
+                                              FontFamily="Consolas"
+                                              Foreground="#E0F0F0"
+                                              TextWrapping="Wrap" />
+
+                                    <!-- Risk Reason -->
+                                    <TextBlock FontSize="11"
+                                              Foreground="#FFB347"
+                                              TextWrapping="Wrap"
+                                              IsVisible="{Binding RiskReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                      <Run Text="Risk: " FontWeight="SemiBold" />
+                                      <Run Text="{Binding RiskReason}" />
+                                    </TextBlock>
+
+                                    <!-- Decoded Command (if encoded) -->
+                                    <Border Background="#1A2A30"
+                                            Padding="6"
+                                            CornerRadius="3"
+                                            IsVisible="{Binding HasDecodedCommand}">
+                                      <StackPanel>
+                                        <TextBlock Text="Decoded:"
+                                                  FontSize="10"
+                                                  FontWeight="Bold"
+                                                  Foreground="#99CC99" />
+                                        <TextBlock Text="{Binding DecodedCommand}"
+                                                  FontSize="11"
+                                                  FontFamily="Consolas"
+                                                  Foreground="#B0E0B0"
+                                                  TextWrapping="Wrap" />
+                                      </StackPanel>
+                                    </Border>
+
+                                    <!-- File info line -->
+                                    <TextBlock Text="{Binding FileModifiedLabel}"
+                                              FontSize="9"
+                                              Foreground="#556666"
+                                              Margin="0,2,0,0" />
+                                  </StackPanel>
+                                </Border>
+                              </DataTemplate>
+                            </ListBox.ItemTemplate>
+                          </ListBox>
+
+                          <!-- PS History Actions -->
+                          <StackPanel Grid.Row="5"
+                                      Orientation="Horizontal"
+                                      Spacing="8"
+                                      Margin="0,8,0,0">
+                            <Button x:Name="PSHistoryCopySelectedButton"
+                                    Content="Copy Selected"
+                                    Click="PSHistoryCopySelectedButton_OnClick"
+                                    MinWidth="110" />
+                            <Button x:Name="PSHistoryAddToCaseButton"
+                                    Content="Add to Case"
+                                    Click="PSHistoryAddToCaseButton_OnClick"
+                                    MinWidth="100" />
+                            <Button x:Name="PSHistoryDecodeButton"
+                                    Content="Copy Decoded"
+                                    Click="PSHistoryDecodeButton_OnClick"
+                                    MinWidth="110" />
+                            <Button x:Name="PSHistoryExportButton"
+                                    Content="Export All"
+                                    Click="PSHistoryExportButton_OnClick"
+                                    MinWidth="100" />
+                          </StackPanel>
+
+                        </Grid>
+                      </Border>
+                    </Expander>
+
                     <!-- Footer -->
-                    <StackPanel Grid.Row="4"
+                    <StackPanel Grid.Row="5"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right"
                                 Margin="0,8,0,0"
