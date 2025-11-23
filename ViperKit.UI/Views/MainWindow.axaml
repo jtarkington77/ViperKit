@@ -314,6 +314,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
@@ -340,8 +341,84 @@
                                   TextWrapping="Wrap" />
                     </StackPanel>
 
+                    <!-- Summary / Triage Panel -->
+                    <Border Grid.Row="1"
+                            Background="#0A1214"
+                            CornerRadius="6"
+                            Padding="12"
+                            Margin="0,12,0,0"
+                            BorderBrush="#1A3C3F"
+                            BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Background="#5A1E2C" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                    <TextBlock x:Name="PersistHighSignalCount"
+                                              Text="0"
+                                              FontWeight="Bold"
+                                              HorizontalAlignment="Center"
+                                              Foreground="#FF9999" />
+                                </Border>
+                                <TextBlock Text="High-signal"
+                                          VerticalAlignment="Center"
+                                          Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Background="#5A1E2C" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                    <TextBlock x:Name="PersistCheckCount"
+                                              Text="0"
+                                              FontWeight="Bold"
+                                              HorizontalAlignment="Center"
+                                              Foreground="#FF9999" />
+                                </Border>
+                                <TextBlock Text="CHECK"
+                                          VerticalAlignment="Center"
+                                          Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Background="#4A3D16" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                    <TextBlock x:Name="PersistNoteCount"
+                                              Text="0"
+                                              FontWeight="Bold"
+                                              HorizontalAlignment="Center"
+                                              Foreground="#FFCC66" />
+                                </Border>
+                                <TextBlock Text="NOTE"
+                                          VerticalAlignment="Center"
+                                          Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Background="#1E3D2A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                    <TextBlock x:Name="PersistOkCount"
+                                              Text="0"
+                                              FontWeight="Bold"
+                                              HorizontalAlignment="Center"
+                                              Foreground="#99CC99" />
+                                </Border>
+                                <TextBlock Text="OK"
+                                          VerticalAlignment="Center"
+                                          Foreground="#C7D4D4" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Background="#2A3A5A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                    <TextBlock x:Name="PersistFocusMatchCount"
+                                              Text="0"
+                                              FontWeight="Bold"
+                                              HorizontalAlignment="Center"
+                                              Foreground="#99CCFF" />
+                                </Border>
+                                <TextBlock Text="Match focus"
+                                          VerticalAlignment="Center"
+                                          Foreground="#C7D4D4" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                    <!-- Filters row -->
-                  <StackPanel Grid.Row="1"
+                  <StackPanel Grid.Row="2"
                               Orientation="Horizontal"
                               Spacing="12"
                               Margin="0,12,0,8">
@@ -390,69 +467,69 @@
                             TextChanged="PersistSearchTextBox_OnTextChanged" />
                   </StackPanel>
 
-                    <!-- Results + detail -->
-                    <Grid Grid.Row="2"
-                          ColumnDefinitions="2*,*">
-                        <!-- List -->
-                       <ListBox x:Name="PersistResultsList"
-                                Grid.Column="0"
-                                Margin="0,0,8,0"
-                                DoubleTapped="PersistResultsList_OnDoubleTapped">
-                            <ListBox.ItemTemplate>
-                              <DataTemplate x:DataType="models:PersistItem">
-                                  <Border Padding="8"
-                                          Margin="0,0,0,6"
-                                          CornerRadius="4"
-                                          BorderThickness="1"
-                                          BorderBrush="#333">
-                                      <StackPanel Spacing="2">
-                                          <!-- Top line: Risk badge + location/source -->
-                                          <StackPanel Orientation="Horizontal"
-                                                      Spacing="8">
-                                              <Border Padding="4,1"
-                                                      CornerRadius="3"
-                                                      Background="#40222222">
-                                                  <TextBlock Text="{Binding Risk}"
-                                                            FontSize="11" />
-                                              </Border>
+                   <!-- Results + detail -->
+                  <Grid Grid.Row="3"
+                        ColumnDefinitions="2*,*">
+                    <!-- List -->
+                    <ListBox x:Name="PersistResultsList"
+                            Grid.Column="0"
+                            Margin="0,0,8,0"
+                            DoubleTapped="PersistResultsList_OnDoubleTapped">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:PersistItem">
+                          <Border Padding="8"
+                                  Margin="0,0,0,6"
+                                  CornerRadius="4"
+                                  BorderThickness="{Binding FocusBorderThickness}"
+                                  BorderBrush="{Binding FocusBorderBrush}">
+                            <StackPanel Spacing="2">
+                              <!-- Top line: Risk badge + location/source -->
+                              <StackPanel Orientation="Horizontal"
+                                          Spacing="8">
+                                <Border Padding="6,2"
+                                        CornerRadius="3"
+                                        Background="{Binding RiskBackground}">
+                                  <TextBlock Text="{Binding Risk}"
+                                            FontSize="11"
+                                            FontWeight="SemiBold" />
+                                </Border>
 
-                                              <TextBlock FontSize="11">
-                                                  <Run Text="{Binding LocationType}" />
-                                                  <Run Text=" • " />
-                                                  <Run Text="{Binding Source}" />
-                                              </TextBlock>
-                                          </StackPanel>
+                                <TextBlock FontSize="11">
+                                  <Run Text="{Binding LocationType}" />
+                                  <Run Text=" • " />
+                                  <Run Text="{Binding Source}" />
+                                </TextBlock>
+                              </StackPanel>
 
-                                          <!-- Name -->
-                                          <TextBlock Text="{Binding Name}"
-                                                    FontWeight="SemiBold"
-                                                    Margin="0,4,0,0" />
+                              <!-- Name -->
+                              <TextBlock Text="{Binding Name}"
+                                        FontWeight="SemiBold"
+                                        Margin="0,4,0,0" />
 
-                                          <!-- Path / RegistryPath (truncated) -->
-                                          <TextBlock Text="{Binding Path}"
-                                                    FontSize="11"
-                                                    TextTrimming="CharacterEllipsis" />
-                                          <TextBlock Text="{Binding RegistryPath}"
-                                                    FontSize="11"
-                                                    TextTrimming="CharacterEllipsis" />
+                              <!-- Path / RegistryPath (truncated) -->
+                              <TextBlock Text="{Binding Path}"
+                                        FontSize="11"
+                                        TextTrimming="CharacterEllipsis" />
+                              <TextBlock Text="{Binding RegistryPath}"
+                                        FontSize="11"
+                                        TextTrimming="CharacterEllipsis" />
 
-                                          <!-- Reason -->
-                                          <TextBlock Text="{Binding Reason}"
-                                                    FontSize="11"
-                                                    Margin="0,4,0,0"
-                                                    TextWrapping="Wrap" />
+                              <!-- Reason -->
+                              <TextBlock Text="{Binding Reason}"
+                                        FontSize="11"
+                                        Margin="0,4,0,0"
+                                        TextWrapping="Wrap" />
 
-                                          <!-- MITRE -->
-                                          <TextBlock Text="{Binding MitreTechnique}"
-                                                    FontSize="10"
-                                                    Foreground="#FFAAAAAA" />
-                                      </StackPanel>
-                                  </Border>
-                              </DataTemplate>
-                          </ListBox.ItemTemplate>
+                              <!-- MITRE -->
+                              <TextBlock Text="{Binding MitreTechnique}"
+                                        FontSize="10"
+                                        Foreground="#FFAAAAAA" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
 
-                        </ListBox>
-
+                    </ListBox>
 
                         <!-- Detail pane (bound to selected item) -->
                         <Border Grid.Column="1"
@@ -507,13 +584,21 @@
                                           FontSize="11" />
                                 <TextBlock Text="{Binding MitreTechnique}"
                                           FontSize="11" />
+
+                                <TextBlock Text="Publisher:"
+                                          Margin="0,6,0,0"
+                                          FontWeight="SemiBold"
+                                          FontSize="11" />
+                                <TextBlock Text="{Binding Publisher}"
+                                          FontSize="11"
+                                          TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
                     </Grid>
 
                     <!-- Footer -->
-                    <StackPanel Grid.Row="3"
+                    <StackPanel Grid.Row="4"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right"
                                 Margin="0,8,0,0"

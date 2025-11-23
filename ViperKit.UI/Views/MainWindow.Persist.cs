@@ -58,6 +58,9 @@ public partial class MainWindow
             // 7) Scheduled tasks
             CollectScheduledTasks();
 
+            // 8) PowerShell profiles
+            CollectPowerShellProfiles();
+
             // Count how many items are flagged as CHECK
             int flaggedCount = _persistItems.Count(p =>
                 p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
@@ -67,6 +70,9 @@ public partial class MainWindow
 
             // Bind into UI ListBox (respecting filters)
             BindPersistResults();
+
+            // Update summary panel counts
+            UpdatePersistSummaryCounts();
 
             if (PersistStatusText != null)
             {
@@ -95,7 +101,8 @@ public partial class MainWindow
                         p.RegistryPath,
                         p.Risk,
                         p.Reason,
-                        p.MitreTechnique
+                        p.MitreTechnique,
+                        p.Publisher
                     }).ToArray()
                 });
             }
@@ -233,7 +240,7 @@ public partial class MainWindow
                     query = query.Where(p =>
                         (!string.IsNullOrEmpty(p.Risk) &&
                         (p.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase) ||
-                         p.Risk.StartsWith("OK",   StringComparison.OrdinalIgnoreCase))));
+                        p.Risk.StartsWith("OK",   StringComparison.OrdinalIgnoreCase))));
                     break;
                 // 0 = All severities
             }
@@ -253,18 +260,27 @@ public partial class MainWindow
         }
 
         // 5) Global case focus – union of ALL focus terms, behind a toggle
-        var focusTerms     = CaseManager.GetFocusTargets();
-        bool filterByFocus = _persistFilterByFocus && focusTerms.Count > 0;
+        var focusTerms = CaseManager.GetFocusTargets();
+        bool hasFocusTerms = focusTerms.Count > 0;
+
+        // Mark items for visual highlight (even when the filter toggle is off)
+        foreach (var item in _persistItems)
+        {
+            item.IsFocusHit = hasFocusTerms && MatchesCaseFocus(item, focusTerms);
+        }
+
+        bool filterByFocus = _persistFilterByFocus && hasFocusTerms;
 
         if (filterByFocus)
         {
-            query = query.Where(p => MatchesCaseFocus(p, focusTerms));
+            // When the toggle is on, only show actual focus hits
+            query = query.Where(p => p.IsFocusHit);
         }
 
         var results = query.ToList();
         PersistResultsList.ItemsSource = results;
 
-        // Nice status text when focus is on but nothing matched
+        // Status when focus is on but nothing matched
         if (PersistStatusText != null &&
             filterByFocus &&
             focusTerms.Count > 0 &&
@@ -273,6 +289,48 @@ public partial class MainWindow
         {
             PersistStatusText.Text =
                 "Status: no persistence hits for current case focus – run Sweep and add related items to focus.";
+        }
+    }
+
+    // Update the summary panel counts for quick triage
+    private void UpdatePersistSummaryCounts()
+    {
+        try
+        {
+            // High-signal count
+            int highSignal = _persistItems.Count(IsHighSignalPersistItem);
+            if (PersistHighSignalCount != null)
+                PersistHighSignalCount.Text = highSignal.ToString();
+
+            // CHECK count
+            int checkCount = _persistItems.Count(p =>
+                !string.IsNullOrEmpty(p.Risk) &&
+                p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
+            if (PersistCheckCount != null)
+                PersistCheckCount.Text = checkCount.ToString();
+
+            // NOTE count
+            int noteCount = _persistItems.Count(p =>
+                !string.IsNullOrEmpty(p.Risk) &&
+                p.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase));
+            if (PersistNoteCount != null)
+                PersistNoteCount.Text = noteCount.ToString();
+
+            // OK count
+            int okCount = _persistItems.Count(p =>
+                !string.IsNullOrEmpty(p.Risk) &&
+                p.Risk.StartsWith("OK", StringComparison.OrdinalIgnoreCase));
+            if (PersistOkCount != null)
+                PersistOkCount.Text = okCount.ToString();
+
+            // Focus match count
+            int focusCount = _persistItems.Count(p => p.IsFocusHit);
+            if (PersistFocusMatchCount != null)
+                PersistFocusMatchCount.Text = focusCount.ToString();
+        }
+        catch
+        {
+            // Summary panel updates should never break the UI
         }
     }
 
@@ -457,11 +515,23 @@ public partial class MainWindow
         CollectRunKeyHive("HKCU RunOnce", Registry.CurrentUser,
             @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
 
+        // HKCU RunServices / RunServicesOnce (legacy)
+        CollectRunKeyHive("HKCU RunServices", Registry.CurrentUser,
+            @"Software\Microsoft\Windows\CurrentVersion\RunServices", "T1547.001");
+        CollectRunKeyHive("HKCU RunServicesOnce", Registry.CurrentUser,
+            @"Software\Microsoft\Windows\CurrentVersion\RunServicesOnce", "T1547.001");
+
         // HKLM 64-bit
         CollectRunKeyHive("HKLM Run", Registry.LocalMachine,
             @"Software\Microsoft\Windows\CurrentVersion\Run", "T1547.001");
         CollectRunKeyHive("HKLM RunOnce", Registry.LocalMachine,
             @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
+
+        // HKLM RunServices / RunServicesOnce
+        CollectRunKeyHive("HKLM RunServices", Registry.LocalMachine,
+            @"Software\Microsoft\Windows\CurrentVersion\RunServices", "T1547.001");
+        CollectRunKeyHive("HKLM RunServicesOnce", Registry.LocalMachine,
+            @"Software\Microsoft\Windows\CurrentVersion\RunServicesOnce", "T1547.001");
 
         // HKLM Wow6432Node (32-bit autoruns on 64-bit OS)
         CollectRunKeyHive("HKLM Wow6432Node Run", Registry.LocalMachine,
@@ -469,6 +539,7 @@ public partial class MainWindow
         CollectRunKeyHive("HKLM Wow6432Node RunOnce", Registry.LocalMachine,
             @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnce", "T1547.001");
     }
+
 
     private void CollectRunKeyHive(string label, RegistryKey root, string subKeyPath, string mitreId)
     {
@@ -500,8 +571,10 @@ public partial class MainWindow
                     expandedPath = Environment.ExpandEnvironmentVariables(expandedPath);
                 }
 
-                // Extract executable-ish path (first token before any arguments)
+                // Extract executable-ish path 
                 string exePath = ExtractExecutablePath(expandedPath);
+                // Who signed / shipped this
+                string publisher = GetFilePublisherSafe(exePath);
 
                 // Basic risk heuristic for help-desk
                 string risk;
@@ -532,7 +605,8 @@ public partial class MainWindow
                     RegistryPath   = $"{root.Name}\\{subKeyPath}",
                     Risk           = risk,
                     Reason         = reason,
-                    MitreTechnique = mitreId
+                    MitreTechnique = mitreId,
+                    Publisher      = publisher
                 });
             }
         }
@@ -572,6 +646,7 @@ public partial class MainWindow
             foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly))
             {
                 string name    = Path.GetFileName(file);
+                string publisher = GetFilePublisherSafe(file);
                 string risk;
                 string reason;
 
@@ -595,7 +670,8 @@ public partial class MainWindow
                     RegistryPath   = folderPath,
                     Risk           = risk,
                     Reason         = reason,
-                    MitreTechnique = mitreId
+                    MitreTechnique = mitreId,
+                    Publisher      = publisher
                 });
             }
         }
@@ -674,6 +750,8 @@ public partial class MainWindow
                 // Re-use the same helper used for Run keys to peel out the EXE path
                 string exePath       = ExtractExecutablePath(expandedPath);
                 bool   existsOnDisk  = !string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath);
+                // Publisher for the binary backing the service/driver
+                string publisher = GetFilePublisherSafe(exePath);
 
                 // Risk heuristic: tone down noise from stale services
                 string risk;
@@ -739,13 +817,86 @@ public partial class MainWindow
                     RegistryPath   = svcKey.Name,
                     Risk           = risk,
                     Reason         = reasonBuilder.ToString(),
-                    MitreTechnique = mitreId
+                    MitreTechnique = mitreId,
+                    Publisher      = publisher
                 });
             }
         }
         catch
         {
             // In v1 we silently skip a full failure here; Run/Startup still show up.
+        }
+    }
+
+    // Inspect PowerShell profile scripts (Windows PowerShell + PowerShell 7) as persistence.
+    private void CollectPowerShellProfiles()
+    {
+        try
+        {
+            var candidates = new List<(string Label, string Path)>();
+
+            // Windows PowerShell – AllUsersAllHosts: %WINDIR%\System32\WindowsPowerShell\v1.0\profile.ps1
+            string windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            if (!string.IsNullOrWhiteSpace(windowsDir))
+            {
+                string allUsersWp = Path.Combine(
+                    windowsDir,
+                    "System32",
+                    "WindowsPowerShell",
+                    "v1.0",
+                    "profile.ps1");
+
+                candidates.Add(("PowerShell profile – AllUsersAllHosts (WindowsPowerShell)", allUsersWp));
+            }
+
+            // Current user – Documents\WindowsPowerShell\profile.ps1
+            string myDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (!string.IsNullOrWhiteSpace(myDocs))
+            {
+                string cuWp = Path.Combine(myDocs, "WindowsPowerShell", "profile.ps1");
+                candidates.Add(("PowerShell profile – CurrentUserAllHosts (WindowsPowerShell)", cuWp));
+
+                // PowerShell 7 – CurrentUserAllHosts: Documents\PowerShell\profile.ps1
+                string cuPwsh = Path.Combine(myDocs, "PowerShell", "profile.ps1");
+                candidates.Add(("PowerShell 7 profile – CurrentUserAllHosts", cuPwsh));
+            }
+
+            // PowerShell 7 – AllUsersAllHosts: %ProgramFiles%\PowerShell\7\profile.ps1
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (!string.IsNullOrWhiteSpace(programFiles))
+            {
+                string allUsersPwsh = Path.Combine(programFiles, "PowerShell", "7", "profile.ps1");
+                candidates.Add(("PowerShell 7 profile – AllUsersAllHosts", allUsersPwsh));
+            }
+
+            foreach (var (label, path) in candidates)
+            {
+                if (!File.Exists(path))
+                    continue;
+
+                string publisher = GetFilePublisherSafe(path);
+
+                const string risk   = "CHECK – PowerShell profile script present";
+                const string reason =
+                    "PowerShell profile executes on PowerShell startup. Review script contents for malicious commands or persistence.";
+
+                _persistItems.Add(new PersistItem
+                {
+                    Source         = label,
+                    LocationType   = "PowerShell profile",
+                    Name           = Path.GetFileName(path),
+                    Path           = path,
+                    RegistryPath   = string.Empty,
+                    Risk           = risk,
+                    Reason         = reason,
+                    MitreTechnique = "T1546.013", // PowerShell profile
+                    Publisher      = publisher
+                });
+            }
+        }
+        catch
+        {
+            // Silent fail – other persistence sources will still appear.
         }
     }
 
@@ -810,6 +961,7 @@ public partial class MainWindow
 
                 string exePath      = ExtractExecutablePath(taskToRun);
                 bool   existsOnDisk = !string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath);
+                string publisher = GetFilePublisherSafe(exePath);
 
                 // Built-in Microsoft tasks usually live under \Microsoft\Windows\...
                 bool isBuiltIn = taskName.StartsWith(@"\Microsoft\Windows\", StringComparison.OrdinalIgnoreCase);
@@ -875,7 +1027,8 @@ public partial class MainWindow
                     RegistryPath   = taskName, // task path, stored here to avoid a new field
                     Risk           = risk,
                     Reason         = reasonBuilder.ToString(),
-                    MitreTechnique = "T1053.005"
+                    MitreTechnique = "T1053.005",
+                    Publisher      = publisher
                 });
             }
         }
@@ -905,6 +1058,7 @@ private void CollectWinlogonPersistence()
             shellExpanded = Environment.ExpandEnvironmentVariables(shellExpanded);
 
         string shellExe = ExtractExecutablePath(shellExpanded);
+        string shellPublisher = GetFilePublisherSafe(shellExe);
 
         // Default-ish: "explorer.exe" or something ending in "\explorer.exe"
         bool shellLooksDefault =
@@ -940,7 +1094,8 @@ private void CollectWinlogonPersistence()
             RegistryPath   = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell",
             Risk           = shellRisk,
             Reason         = shellReason,
-            MitreTechnique = "T1547.004" // Boot or Logon Autostart – Winlogon
+            MitreTechnique = "T1547.004",
+            Publisher      = shellPublisher
         });
 
         // Userinit ----------------------------------------------
@@ -951,6 +1106,7 @@ private void CollectWinlogonPersistence()
             userinitExpanded = Environment.ExpandEnvironmentVariables(userinitExpanded);
 
         string userinitExe = ExtractExecutablePath(userinitExpanded);
+        string userinitPublisher = GetFilePublisherSafe(userinitExe);
 
         // Default pattern: C:\Windows\system32\userinit.exe,
         bool userinitLooksDefault =
@@ -985,7 +1141,8 @@ private void CollectWinlogonPersistence()
             RegistryPath   = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Userinit",
             Risk           = userinitRisk,
             Reason         = userinitReason,
-            MitreTechnique = "T1547.004"
+            MitreTechnique = "T1547.004",
+            Publisher      = userinitPublisher
         });
     }
     catch
@@ -1019,6 +1176,7 @@ private void CollectImageFileExecutionOptionsPersistence()
                 debuggerExpanded = Environment.ExpandEnvironmentVariables(debuggerExpanded);
 
             string debuggerExe  = ExtractExecutablePath(debuggerExpanded);
+            string publisher = GetFilePublisherSafe(debuggerExe);
             bool   existsOnDisk = !string.IsNullOrWhiteSpace(debuggerExe) && File.Exists(debuggerExe);
 
             // IFEO debugger is always worth a look for help-desk, so treat as CHECK by default
@@ -1050,7 +1208,8 @@ private void CollectImageFileExecutionOptionsPersistence()
                 RegistryPath   = exeKey.Name, // full IFEO subkey path
                 Risk           = risk,
                 Reason         = reason,
-                MitreTechnique = "T1546.012" // Image File Execution Options Injection
+                MitreTechnique = "T1546.012",
+                Publisher      = publisher
             });
         }
     }
@@ -1147,6 +1306,7 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             }
 
             bool exists = File.Exists(fullPath);
+            string publisher = GetFilePublisherSafe(fullPath);
 
             string risk;
             var reasonBuilder = new StringBuilder();
@@ -1183,7 +1343,8 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
                 RegistryPath   = $"{root.Name}\\{subKeyPath}",
                 Risk           = risk,
                 Reason         = reasonBuilder.ToString(),
-                MitreTechnique = "T1546.010"
+                MitreTechnique = "T1546.010",
+                Publisher      = publisher
             });
         }
     }
@@ -1406,6 +1567,9 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             if (!string.IsNullOrWhiteSpace(item.MitreTechnique))
                 detailsBuilder.Append($"MITRE: {item.MitreTechnique}. ");
 
+            if (!string.IsNullOrWhiteSpace(item.Publisher))
+                detailsBuilder.Append($"Publisher: {item.Publisher}. ");
+
             CaseManager.AddEvent(
                 tab: "Persist",
                 action: "Persistence entry added to case",
@@ -1455,6 +1619,9 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
 
             if (!string.IsNullOrWhiteSpace(item.MitreTechnique))
                 detailsBuilder.Append($"MITRE: {item.MitreTechnique}. ");
+
+            if (!string.IsNullOrWhiteSpace(item.Publisher))
+                detailsBuilder.Append($"Publisher: {item.Publisher}. ");
 
             CaseManager.AddEvent(
                 tab: "Persist",
@@ -1512,7 +1679,7 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         string path = p.Path         ?? string.Empty;
         string risk = p.Risk         ?? string.Empty;
 
-        // IFEO / Winlogon / AppInit_DLLs are always worth a look
+            // IFEO / Winlogon / AppInit_DLLs are always worth a look
         if (src.Equals("IFEO", StringComparison.OrdinalIgnoreCase))
             return true;
 
@@ -1520,6 +1687,10 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             return true;
 
         if (loc.Contains("AppInit_DLLs", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // PowerShell profiles can be a stealthy execution hook
+        if (loc.Contains("PowerShell profile", StringComparison.OrdinalIgnoreCase))
             return true;
 
         // Autorun / Startup entries under user/AppData/Temp
@@ -1532,8 +1703,8 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
 
         // Services / drivers / tasks that are actively flagged CHECK
         if ((loc.StartsWith("Service", StringComparison.OrdinalIgnoreCase) ||
-             loc.StartsWith("Driver",  StringComparison.OrdinalIgnoreCase) ||
-             loc.StartsWith("Scheduled task", StringComparison.OrdinalIgnoreCase)) &&
+            loc.StartsWith("Driver",  StringComparison.OrdinalIgnoreCase) ||
+            loc.StartsWith("Scheduled task", StringComparison.OrdinalIgnoreCase)) &&
             risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -1541,45 +1712,6 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
 
         return false;
     }
-
-    private static bool PersistMatchesCaseFocus(PersistItem item, IReadOnlyList<string> focusTargets)
-    {
-        if (item == null || focusTargets == null || focusTargets.Count == 0)
-            return false;
-
-        // These are the fields we look at when we say "is this tied to the tool I'm hunting?"
-        string[] fields =
-        {
-            item.Name         ?? string.Empty,
-            item.Path         ?? string.Empty,
-            item.RegistryPath ?? string.Empty,
-            item.Source       ?? string.Empty,
-            item.LocationType ?? string.Empty,
-            item.Reason       ?? string.Empty
-        };
-
-        foreach (var rawToken in focusTargets)
-        {
-            if (string.IsNullOrWhiteSpace(rawToken))
-                continue;
-
-            string token = rawToken.Trim().ToLowerInvariant();
-            if (token.Length == 0)
-                continue;
-
-            foreach (var field in fields)
-            {
-                if (field.Length == 0)
-                    continue;
-
-                if (field.ToLowerInvariant().Contains(token))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
 
     // -----------------------------------------
     // Utility helpers
@@ -1623,6 +1755,26 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         // Last field
         yield return sb.ToString();
     }
+
+    private static string GetFilePublisherSafe(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        try
+        {
+            if (!File.Exists(path))
+                return string.Empty;
+
+            var vi = FileVersionInfo.GetVersionInfo(path);
+            return vi.CompanyName ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
 
     private static string GetCsvField(string[] fields, int index)
     {
