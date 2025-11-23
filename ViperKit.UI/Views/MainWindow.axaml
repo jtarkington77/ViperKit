@@ -910,8 +910,14 @@
                               Content="Save Snapshot"
                               Click="SweepSaveResultsButton_OnClick"/>
                       <Button x:Name="SweepAddToFocusButton"
-                              Content="Add selected to focus"
+                              Content="Add to focus"
                               Click="SweepAddToFocusButton_OnClick"/>
+                      <Button x:Name="SweepAddToCaseButton"
+                              Content="Add to case"
+                              Click="SweepAddToCaseButton_OnClick"/>
+                      <Button x:Name="SweepInvestigateButton"
+                              Content="Investigate"
+                              Click="SweepInvestigateButton_OnClick"/>
                       <Button x:Name="SweepOpenLocationButton"
                               Content="Open location"
                               Click="SweepOpenLocationButton_OnClick"/>

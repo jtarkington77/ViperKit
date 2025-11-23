@@ -783,4 +783,110 @@ public partial class MainWindow
                 SweepStatusText.Text = $"Status: error opening location – {ex.Message}";
         }
     }
+
+    private void SweepAddToCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (SweepResultsList?.SelectedItem is not SweepEntry entry)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: select an item to add to case.";
+            return;
+        }
+
+        try
+        {
+            // Build details string with all relevant info
+            var details = new List<string>();
+
+            if (!string.IsNullOrEmpty(entry.Path))
+                details.Add($"Path: {entry.Path}");
+            if (entry.Modified.HasValue)
+                details.Add($"Modified: {entry.Modified.Value:yyyy-MM-dd HH:mm:ss}");
+            if (!string.IsNullOrEmpty(entry.Reason))
+                details.Add($"Reason: {entry.Reason}");
+            if (!string.IsNullOrEmpty(entry.Source))
+                details.Add($"Source: {entry.Source}");
+            if (entry.HasClusterIndicator)
+                details.Add($"Cluster: {entry.ClusterIndicator} ({entry.ClusterTarget})");
+
+            CaseManager.AddEvent(
+                tab: "Sweep",
+                action: "Item flagged for case",
+                severity: entry.Severity.ToUpperInvariant() == "HIGH" ? "WARN" : "INFO",
+                target: entry.Name,
+                details: string.Join("; ", details));
+
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: '{entry.Name}' added to case log.";
+
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch (Exception ex)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: error adding to case – {ex.Message}";
+        }
+    }
+
+    private void SweepInvestigateButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (SweepResultsList?.SelectedItem is not SweepEntry entry)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: select an item to investigate.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(entry.Path) || !File.Exists(entry.Path))
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: file not found or path is empty.";
+            return;
+        }
+
+        try
+        {
+            // Calculate SHA256 hash
+            string hash;
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+            using (var stream = File.OpenRead(entry.Path))
+            {
+                byte[] hashBytes = sha256.ComputeHash(stream);
+                hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            }
+
+            // Get file info
+            var fileInfo = new FileInfo(entry.Path);
+            long sizeKb = fileInfo.Length / 1024;
+
+            // Update status with hash (easy to copy)
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"SHA256: {hash} | Size: {sizeKb} KB | Created: {fileInfo.CreationTime:yyyy-MM-dd HH:mm}";
+
+            // Open VirusTotal search with the hash
+            string vtUrl = $"https://www.virustotal.com/gui/search/{hash}";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = vtUrl,
+                UseShellExecute = true
+            });
+
+            // Log the investigation to case
+            CaseManager.AddEvent(
+                tab: "Sweep",
+                action: "File investigated",
+                severity: "INFO",
+                target: entry.Name,
+                details: $"SHA256: {hash}; Size: {sizeKb} KB; VirusTotal lookup opened");
+
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch (Exception ex)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: error investigating – {ex.Message}";
+        }
+    }
 }
