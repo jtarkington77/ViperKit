@@ -1850,5 +1850,66 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
     private PersistItem? GetSelectedPersistItem()
     {
         return PersistResultsList?.SelectedItem as PersistItem;
-    }  
+    }
+
+    // ----------------------------
+    // PERSIST – Add to Cleanup Queue
+    // ----------------------------
+    private void PersistAddToCleanupButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var item = GetSelectedPersistItem();
+        if (item == null)
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = "Status: select an item to add to cleanup queue.";
+            return;
+        }
+
+        // Check if already in queue
+        if (CaseManager.IsInCleanupQueue(item.Path))
+        {
+            if (PersistStatusText != null)
+                PersistStatusText.Text = $"Status: {item.Name} is already in the cleanup queue.";
+            return;
+        }
+
+        // Determine item type and action based on LocationType
+        string itemType = item.LocationType.ToLowerInvariant() switch
+        {
+            "service" or "driver" => "Service",
+            "scheduled task" => "ScheduledTask",
+            "startup folder" => "StartupItem",
+            _ when item.RegistryPath.Length > 0 => "RegistryKey",
+            _ => "File"
+        };
+
+        string action = itemType switch
+        {
+            "Service" => "Disable",
+            "ScheduledTask" => "Disable",
+            "RegistryKey" => "BackupAndDelete",
+            _ => "Quarantine"
+        };
+
+        // Map Risk to Severity
+        string severity = item.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase) ? "HIGH"
+            : item.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase) ? "MEDIUM"
+            : "LOW";
+
+        var cleanupItem = new CleanupItem
+        {
+            ItemType = itemType,
+            Name = item.Name,
+            OriginalPath = !string.IsNullOrEmpty(item.Path) ? item.Path : item.RegistryPath,
+            SourceTab = "Persist",
+            Severity = severity,
+            Reason = item.Reason,
+            Action = action
+        };
+
+        CaseManager.AddToCleanupQueue(cleanupItem);
+
+        if (PersistStatusText != null)
+            PersistStatusText.Text = $"Status: {item.Name} added to cleanup queue ({action}).";
+    }
 }

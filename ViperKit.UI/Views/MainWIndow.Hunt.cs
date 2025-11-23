@@ -7,6 +7,7 @@ using System.Net.NetworkInformation;
 using System.Security.Cryptography;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Microsoft.Win32;
@@ -31,7 +32,7 @@ public partial class MainWindow
     // HUNT TAB
     // =========================
 
-   private void HuntRunButton_OnClick(object? sender, RoutedEventArgs e)
+   private async void HuntRunButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var iocText = HuntIocInput?.Text?.Trim() ?? string.Empty;
 
@@ -46,67 +47,83 @@ public partial class MainWindow
             return;
         }
 
-        // Clear previous structured results
-        _huntResults.Clear();
-        if (HuntResultsList != null)
-            HuntResultsList.ItemsSource = null;
+        // Disable button during hunt to prevent double-clicks
+        if (sender is Button btn)
+            btn.IsEnabled = false;
 
-        // Figure out selected type
-        var selectedIndex = HuntIocType?.SelectedIndex ?? 0;
-        var effectiveType = DetermineIocType(iocText, selectedIndex);
-
-        // Log the action (file, json, case)
-        LogHuntAction(iocText, effectiveType);
-
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        if (HuntStatusText != null)
-            HuntStatusText.Text = $"Status: {effectiveType} hunt executed at {timestamp}.";
-
-        switch (effectiveType)
-        {
-            case "FilePath":
-                HandleFilePathHunt(iocText);
-                break;
-
-            case "Registry":
-                HandleRegistryHunt(iocText);
-                break;
-
-            case "IpAddress":
-                HandleIpHunt(iocText);
-                break;
-
-            case "DomainOrUrl":
-                HandleDomainHunt(iocText);
-                break;
-
-            case "Hash":
-                HandleHashHunt(iocText);
-                break;
-
-            case "NameKeyword":
-                HandleNameKeywordHunt(iocText);
-                break;
-
-            default:
-                if (HuntResultsText != null)
-                {
-                    HuntResultsText.Text =
-                        $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
-                        "This IOC type is not wired yet.";
-                }
-                break;
-        }
-
-        // Keep dashboard + case tab in sync
         try
         {
-            UpdateDashboardCaseSummary();
-            RefreshCaseTab();
+            // Clear previous structured results
+            _huntResults.Clear();
+            if (HuntResultsList != null)
+                HuntResultsList.ItemsSource = null;
+
+            // Figure out selected type
+            var selectedIndex = HuntIocType?.SelectedIndex ?? 0;
+            var effectiveType = DetermineIocType(iocText, selectedIndex);
+
+            // Log the action (file, json, case)
+            LogHuntAction(iocText, effectiveType);
+
+            var timestamp = DateTime.Now.ToString("HH:mm:ss");
+            if (HuntStatusText != null)
+                HuntStatusText.Text = $"Status: {effectiveType} hunt running...";
+
+            switch (effectiveType)
+            {
+                case "FilePath":
+                    await HandleFilePathHuntAsync(iocText);
+                    break;
+
+                case "Registry":
+                    HandleRegistryHunt(iocText);
+                    break;
+
+                case "IpAddress":
+                    await HandleIpHuntAsync(iocText);
+                    break;
+
+                case "DomainOrUrl":
+                    await HandleDomainHuntAsync(iocText);
+                    break;
+
+                case "Hash":
+                    await HandleHashHuntAsync(iocText);
+                    break;
+
+                case "NameKeyword":
+                    await HandleNameKeywordHuntAsync(iocText);
+                    break;
+
+                default:
+                    if (HuntResultsText != null)
+                    {
+                        HuntResultsText.Text =
+                            $"Received IOC of type {effectiveType}: \"{iocText}\".\n\n" +
+                            "This IOC type is not wired yet.";
+                    }
+                    break;
+            }
+
+            if (HuntStatusText != null)
+                HuntStatusText.Text = $"Status: {effectiveType} hunt completed at {timestamp}.";
+
+            // Keep dashboard + case tab in sync
+            try
+            {
+                UpdateDashboardCaseSummary();
+                RefreshCaseTab();
+            }
+            catch
+            {
+                // Never let UI updates crash the hunt
+            }
         }
-        catch
+        finally
         {
-            // Never let UI updates crash the hunt
+            // Re-enable button
+            if (sender is Button btn2)
+                btn2.IsEnabled = true;
         }
     }
 
@@ -208,22 +225,32 @@ public partial class MainWindow
     }
 
     // ---- File / Folder hunt ----
-    private void HandleFilePathHunt(string path)
+    private async Task HandleFilePathHuntAsync(string path)
     {
         try
         {
-            // If it's a directory
+            // If it's a directory - run enumeration on background thread
             if (Directory.Exists(path))
             {
                 var dirInfo = new DirectoryInfo(path);
-                long totalSize = 0;
-                int fileCount = 0;
 
-                foreach (var file in dirInfo.EnumerateFiles("*", SearchOption.AllDirectories))
+                // Run file enumeration on background thread to avoid UI freeze
+                var (fileCount, totalSize) = await Task.Run(() =>
                 {
-                    fileCount++;
-                    totalSize += file.Length;
-                }
+                    long size = 0;
+                    int count = 0;
+                    try
+                    {
+                        foreach (var file in EnumerateFilesSafe(path))
+                        {
+                            count++;
+                            try { size += new FileInfo(file).Length; }
+                            catch { /* skip files we can't read */ }
+                        }
+                    }
+                    catch { /* enumeration error */ }
+                    return (count, size);
+                });
 
                 var text =
                     $"Folder found:\n" +
@@ -245,54 +272,50 @@ public partial class MainWindow
                     Details  = $"Files: {fileCount}, Approx. size: {totalSize} bytes"
                 });
 
-                if (HuntResultsList != null)
-                {
-                    HuntResultsList.ItemsSource = null;
-                    HuntResultsList.ItemsSource = _huntResults.ToArray();
-                }
-
+                RefreshHuntResultsList();
                 return;
             }
 
-            // If it's a file
+            // If it's a file - run hashing on background thread
             if (File.Exists(path))
             {
                 var info = new FileInfo(path);
 
-                string md5Hex    = "(error)";
-                string sha256Hex = "(error)";
-
-                try
+                // Run hash computation on background thread
+                var (md5Hex, sha256Hex) = await Task.Run(() =>
                 {
-                    using var stream = File.OpenRead(path);
+                    string md5 = "(error)";
+                    string sha256 = "(error)";
 
-                    // MD5
-                    using (var md5 = MD5.Create())
+                    try
                     {
-                        var md5Bytes = md5.ComputeHash(stream);
-                        md5Hex = Convert.ToHexString(md5Bytes);
+                        using var stream = File.OpenRead(path);
+
+                        // MD5
+                        var md5Bytes = MD5.HashData(stream);
+                        md5 = Convert.ToHexString(md5Bytes);
+
+                        // Reset stream for second hash
+                        stream.Position = 0;
+
+                        // SHA-256
+                        var shaBytes = SHA256.HashData(stream);
+                        sha256 = Convert.ToHexString(shaBytes);
+                    }
+                    catch (Exception ex)
+                    {
+                        md5 = $"(error: {ex.Message})";
+                        sha256 = "(not computed)";
                     }
 
-                    // Reset stream for second hash
-                    stream.Position = 0;
+                    return (md5, sha256);
+                });
 
-                    // SHA-256
-                    using (var sha = SHA256.Create())
-                    {
-                        var shaBytes = sha.ComputeHash(stream);
-                        sha256Hex = Convert.ToHexString(shaBytes);
-                    }
-
-                    // Log both hashes so they show up in Hashes.log as well
-                    LogHashObserved(md5Hex.ToLowerInvariant(),  "MD5 (file path hunt)");
+                // Log both hashes so they show up in Hashes.log as well
+                if (!md5Hex.StartsWith("(error"))
+                    LogHashObserved(md5Hex.ToLowerInvariant(), "MD5 (file path hunt)");
+                if (!sha256Hex.StartsWith("("))
                     LogHashObserved(sha256Hex.ToLowerInvariant(), "SHA-256 (file path hunt)");
-                }
-                catch (Exception ex)
-                {
-                    // If hashing fails, still show file metadata
-                    md5Hex    = $"(error computing hash: {ex.Message})";
-                    sha256Hex = "(not computed)";
-                }
 
                 var sb = new StringBuilder();
                 sb.AppendLine("File found:");
@@ -318,12 +341,7 @@ public partial class MainWindow
                     Details  = $"Size: {info.Length} bytes; MD5: {md5Hex}; SHA-256: {sha256Hex}"
                 });
 
-                if (HuntResultsList != null)
-                {
-                    HuntResultsList.ItemsSource = null;
-                    HuntResultsList.ItemsSource = _huntResults.ToArray();
-                }
-
+                RefreshHuntResultsList();
                 return;
             }
 
@@ -344,11 +362,7 @@ public partial class MainWindow
                 Details  = "Verify the path is correct and accessible from this machine."
             });
 
-            if (HuntResultsList != null)
-            {
-                HuntResultsList.ItemsSource = null;
-                HuntResultsList.ItemsSource = _huntResults.ToArray();
-            }
+            RefreshHuntResultsList();
         }
         catch (Exception ex)
         {
@@ -368,17 +382,25 @@ public partial class MainWindow
                 Details  = ex.Message
             });
 
-            if (HuntResultsList != null)
-            {
-                HuntResultsList.ItemsSource = null;
-                HuntResultsList.ItemsSource = _huntResults.ToArray();
-            }
+            RefreshHuntResultsList();
+        }
+    }
+
+    /// <summary>
+    /// Helper to refresh hunt results list - reduces code duplication.
+    /// </summary>
+    private void RefreshHuntResultsList()
+    {
+        if (HuntResultsList != null)
+        {
+            HuntResultsList.ItemsSource = null;
+            HuntResultsList.ItemsSource = _huntResults.ToArray();
         }
     }
 
 
     // ---- IP hunt ----
-    private void HandleIpHunt(string input)
+    private async Task HandleIpHuntAsync(string input)
     {
         if (!IPAddress.TryParse(input.Trim(), out var ip))
         {
@@ -398,12 +420,7 @@ public partial class MainWindow
                 Details  = "Example: 1.2.3.4"
             });
 
-            if (HuntResultsList != null)
-            {
-                HuntResultsList.ItemsSource = null;
-                HuntResultsList.ItemsSource = _huntResults.ToArray();
-            }
-
+            RefreshHuntResultsList();
             return;
         }
 
@@ -411,12 +428,17 @@ public partial class MainWindow
         sb.AppendLine($"IP address: {ip}");
         sb.AppendLine($"Family: {ip.AddressFamily}");
 
-        // Reverse DNS
+        // Reverse DNS - run on background thread with timeout
         string reverseDnsSummary;
         try
         {
-            var hostEntry = Dns.GetHostEntry(ip);
-            if (hostEntry.Aliases.Length == 0 && string.IsNullOrWhiteSpace(hostEntry.HostName))
+            var hostEntry = await Task.Run(() =>
+            {
+                try { return Dns.GetHostEntry(ip); }
+                catch { return null; }
+            });
+
+            if (hostEntry == null || (hostEntry.Aliases.Length == 0 && string.IsNullOrWhiteSpace(hostEntry.HostName)))
             {
                 sb.AppendLine("Reverse DNS: (no hostnames returned)");
                 reverseDnsSummary = "Reverse DNS: (no hostnames)";
@@ -441,12 +463,15 @@ public partial class MainWindow
             reverseDnsSummary = "Reverse DNS lookup error";
         }
 
-        // Reachability ping
+        // Reachability ping - run on background thread
         string pingSummary;
         try
         {
-            using var ping = new Ping();
-            var reply = ping.Send(ip, 1000); // 1 second timeout
+            var reply = await Task.Run(() =>
+            {
+                using var ping = new Ping();
+                return ping.Send(ip, 1000); // 1 second timeout
+            });
 
             sb.AppendLine();
             sb.AppendLine("Ping test:");
@@ -485,15 +510,11 @@ public partial class MainWindow
             Details  = $"{reverseDnsSummary}; {pingSummary}"
         });
 
-        if (HuntResultsList != null)
-        {
-            HuntResultsList.ItemsSource = null;
-            HuntResultsList.ItemsSource = _huntResults.ToArray();
-        }
+        RefreshHuntResultsList();
     }
 
     // ---- Name / keyword hunt (ScreenConnect, AnyDesk, etc.) ----
-    private void HandleNameKeywordHunt(string term)
+    private async Task HandleNameKeywordHuntAsync(string term)
     {
         string keyword = term?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(keyword))
@@ -503,34 +524,50 @@ public partial class MainWindow
             return;
         }
 
-        string needle = keyword.ToLowerInvariant();
         var sb = new StringBuilder();
         sb.AppendLine($"Name / keyword hunt: {keyword}");
         sb.AppendLine();
 
-        // 1) Processes
+        // 1) Processes - run on background thread
         sb.AppendLine("Processes with matching name:");
         bool anyProcess = false;
 
         try
         {
-            foreach (var proc in Process.GetProcesses())
+            var processMatches = await Task.Run(() =>
             {
-                string name = proc.ProcessName ?? string.Empty;
-                if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                var matches = new List<(string Name, int Id)>();
+                foreach (var proc in Process.GetProcesses())
                 {
-                    anyProcess = true;
-                    sb.AppendLine($"  {name} (PID {proc.Id})");
-
-                    _huntResults.Add(new HuntResult
+                    try
                     {
-                        Category = "Process",
-                        Target   = $"{name} (PID {proc.Id})",
-                        Severity = "INFO",
-                        Summary  = "Matching process name",
-                        Details  = $"Process ID: {proc.Id}"
-                    });
+                        string name = proc.ProcessName ?? string.Empty;
+                        if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            matches.Add((name, proc.Id));
+                        }
+                    }
+                    finally
+                    {
+                        proc.Dispose(); // Properly dispose process objects
+                    }
                 }
+                return matches;
+            });
+
+            foreach (var (name, pid) in processMatches)
+            {
+                anyProcess = true;
+                sb.AppendLine($"  {name} (PID {pid})");
+
+                _huntResults.Add(new HuntResult
+                {
+                    Category = "Process",
+                    Target   = $"{name} (PID {pid})",
+                    Severity = "INFO",
+                    Summary  = "Matching process name",
+                    Details  = $"Process ID: {pid}"
+                });
             }
         }
         catch (Exception ex)
@@ -553,36 +590,44 @@ public partial class MainWindow
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) // ProgramData
         };
 
-        foreach (var root in roots)
+        // Run directory enumeration on background thread
+        var dirMatches = await Task.Run(() =>
         {
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-                continue;
-
-            try
+            var matches = new List<(string Dir, string Root)>();
+            foreach (var root in roots)
             {
-                foreach (var dir in Directory.GetDirectories(root))
-                {
-                    string dirName = Path.GetFileName(dir);
-                    if (dirName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        anyDirMatch = true;
-                        sb.AppendLine($"  {dir}");
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                    continue;
 
-                        _huntResults.Add(new HuntResult
+                try
+                {
+                    foreach (var dir in Directory.GetDirectories(root))
+                    {
+                        string dirName = Path.GetFileName(dir);
+                        if (dirName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            Category = "File",
-                            Target   = dir,
-                            Severity = "INFO",
-                            Summary  = "Install folder name match",
-                            Details  = $"Top-level folder under {root}"
-                        });
+                            matches.Add((dir, root));
+                        }
                     }
                 }
+                catch { /* ignore unreadable roots */ }
             }
-            catch
+            return matches;
+        });
+
+        foreach (var (dir, root) in dirMatches)
+        {
+            anyDirMatch = true;
+            sb.AppendLine($"  {dir}");
+
+            _huntResults.Add(new HuntResult
             {
-                // ignore unreadable roots
-            }
+                Category = "File",
+                Target   = dir,
+                Severity = "INFO",
+                Summary  = "Install folder name match",
+                Details  = $"Top-level folder under {root}"
+            });
         }
 
         if (!anyDirMatch)
@@ -593,49 +638,60 @@ public partial class MainWindow
         if (!string.IsNullOrWhiteSpace(scopeFolder) && Directory.Exists(scopeFolder))
         {
             const int MaxFilesToScan = 4000;
-            int filesScanned = 0;
-            int matchCount   = 0;
-            bool limitHit    = false;
 
             sb.AppendLine();
             sb.AppendLine($"Scope folder file-name scan: {scopeFolder}");
             sb.AppendLine($"Max files to scan this run: {MaxFilesToScan}");
 
+            if (HuntStatusText != null)
+                HuntStatusText.Text = "Status: keyword disk scan running...";
+
             try
             {
-                if (HuntStatusText != null)
-                    HuntStatusText.Text = "Status: keyword disk scan running.";
-
-                foreach (var file in EnumerateFilesSafe(scopeFolder))
+                // Run file scan on background thread
+                var (fileMatches, filesScanned, limitHit) = await Task.Run(() =>
                 {
-                    if (filesScanned >= MaxFilesToScan)
+                    var matches = new List<string>();
+                    int scanned = 0;
+                    bool hitLimit = false;
+
+                    foreach (var file in EnumerateFilesSafe(scopeFolder))
                     {
-                        limitHit = true;
-                        break;
-                    }
-
-                    filesScanned++;
-
-                    string fileName = Path.GetFileName(file);
-                    if (fileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        matchCount++;
-                        sb.AppendLine($"  {file}");
-
-                        _huntResults.Add(new HuntResult
+                        if (scanned >= MaxFilesToScan)
                         {
-                            Category = "File",
-                            Target   = file,
-                            Severity = "INFO",
-                            Summary  = "File name match",
-                            Details  = $"Found under scope folder {scopeFolder}"
-                        });
+                            hitLimit = true;
+                            break;
+                        }
+
+                        scanned++;
+
+                        string fileName = Path.GetFileName(file);
+                        if (fileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            matches.Add(file);
+                        }
                     }
+
+                    return (matches, scanned, hitLimit);
+                });
+
+                foreach (var file in fileMatches)
+                {
+                    sb.AppendLine($"  {file}");
+
+                    _huntResults.Add(new HuntResult
+                    {
+                        Category = "File",
+                        Target   = file,
+                        Severity = "INFO",
+                        Summary  = "File name match",
+                        Details  = $"Found under scope folder {scopeFolder}"
+                    });
                 }
 
                 sb.AppendLine();
                 sb.AppendLine($"Files scanned: {filesScanned}");
-                sb.AppendLine($"Name matches: {matchCount}");
+                sb.AppendLine($"Name matches: {fileMatches.Count}");
                 if (limitHit)
                     sb.AppendLine("File scan limit hit; narrow your scope for deeper sweeps.");
             }
@@ -652,17 +708,13 @@ public partial class MainWindow
         if (HuntResultsText != null)
             HuntResultsText.Text = sb.ToString();
 
-        if (HuntResultsList != null)
-        {
-            HuntResultsList.ItemsSource = null;
-            HuntResultsList.ItemsSource = _huntResults.ToArray();
-        }
+        RefreshHuntResultsList();
     }
 
 
 
     // ---- Domain / URL hunt ----
-    private async void HandleDomainHunt(string ioc)
+    private async Task HandleDomainHuntAsync(string ioc)
     {
         string original = ioc ?? string.Empty;
         string host     = original.Trim();
@@ -786,11 +838,7 @@ public partial class MainWindow
             Details  = $"{dnsSummary}; {httpSummary}"
         });
 
-        if (HuntResultsList != null)
-        {
-            HuntResultsList.ItemsSource = null;
-            HuntResultsList.ItemsSource = _huntResults.ToArray();
-        }
+        RefreshHuntResultsList();
     }
 
 
@@ -1014,7 +1062,7 @@ public partial class MainWindow
 
 
     // ---- Hash hunt (with optional disk sweep) ----
-    private void HandleHashHunt(string hash)
+    private async Task HandleHashHuntAsync(string hash)
     {
         if (string.IsNullOrWhiteSpace(hash))
         {
@@ -1075,70 +1123,74 @@ public partial class MainWindow
             sb.AppendLine($"Max files to scan this run: {MaxFilesToScan}");
             sb.AppendLine();
 
-            int matchCount   = 0;
-            int filesScanned = 0;
-            bool limitHit    = false;
-
-            var matches = new List<string>();
+            if (HuntStatusText != null)
+                HuntStatusText.Text = "Status: disk scan running...";
 
             try
             {
-                // status line while we work
-                if (HuntStatusText != null)
-                    HuntStatusText.Text = "Status: disk scan running...";
-
-                foreach (var file in EnumerateFilesSafe(scopeFolder))
+                // Run hash scan on background thread
+                var (matches, filesScanned, limitHit) = await Task.Run(() =>
                 {
-                    // Respect file scan limit
-                    if (filesScanned >= MaxFilesToScan)
+                    var matchList = new List<string>();
+                    int scanned = 0;
+                    bool hitLimit = false;
+
+                    foreach (var file in EnumerateFilesSafe(scopeFolder))
                     {
-                        limitHit = true;
-                        break;
-                    }
-
-                    filesScanned++;
-
-                    try
-                    {
-                        using var stream = File.OpenRead(file);
-                        byte[] hashBytes;
-
-                        if (normalized.Length == 32)
+                        if (scanned >= MaxFilesToScan)
                         {
-                            hashBytes = MD5.HashData(stream);
-                        }
-                        else // 64
-                        {
-                            hashBytes = SHA256.HashData(stream);
+                            hitLimit = true;
+                            break;
                         }
 
-                        string fileHash = BitConverter.ToString(hashBytes)
-                            .Replace("-", "")
-                            .ToLowerInvariant();
+                        scanned++;
 
-                        if (fileHash == normalized)
+                        try
                         {
-                            matchCount++;
-                            matches.Add(file);
+                            using var stream = File.OpenRead(file);
+                            byte[] hashBytes;
 
-                            // Add each hit as a result row
-                            _huntResults.Add(new HuntResult
+                            if (normalized.Length == 32)
                             {
-                                Category = "HashHit",
-                                Target   = file,
-                                Severity = "WARN",
-                                Summary  = "File matches IOC hash",
-                                Details  = $"Scope: {scopeFolder}"
-                            });
+                                hashBytes = MD5.HashData(stream);
+                            }
+                            else // 64
+                            {
+                                hashBytes = SHA256.HashData(stream);
+                            }
+
+                            string fileHash = BitConverter.ToString(hashBytes)
+                                .Replace("-", "")
+                                .ToLowerInvariant();
+
+                            if (fileHash == normalized)
+                            {
+                                matchList.Add(file);
+                            }
+                        }
+                        catch
+                        {
+                            // Skip unreadable files, don't kill the scan
                         }
                     }
-                    catch
+
+                    return (matchList, scanned, hitLimit);
+                });
+
+                // Add results on UI thread
+                foreach (var file in matches)
+                {
+                    _huntResults.Add(new HuntResult
                     {
-                        // Skip unreadable files, don't kill the scan
-                    }
+                        Category = "HashHit",
+                        Target   = file,
+                        Severity = "WARN",
+                        Summary  = "File matches IOC hash",
+                        Details  = $"Scope: {scopeFolder}"
+                    });
                 }
 
-                if (matchCount == 0)
+                if (matches.Count == 0)
                 {
                     sb.AppendLine($"Disk scan: no matching files found under scope. Files scanned: {filesScanned}.");
 
@@ -1160,7 +1212,7 @@ public partial class MainWindow
                 }
                 else
                 {
-                    sb.AppendLine($"Disk scan: {matchCount} matching file(s) found. Files scanned: {filesScanned}.");
+                    sb.AppendLine($"Disk scan: {matches.Count} matching file(s) found. Files scanned: {filesScanned}.");
                     foreach (var m in matches)
                         sb.AppendLine($"  {m}");
 
@@ -1174,7 +1226,7 @@ public partial class MainWindow
                         Category = "HashScan",
                         Target   = scopeFolder,
                         Severity = "WARN",
-                        Summary  = $"Disk scan completed – {matchCount} match(es)",
+                        Summary  = $"Disk scan completed – {matches.Count} match(es)",
                         Details  = limitHit
                             ? $"Files scanned: {filesScanned} (safety limit hit). Protected folders may have been skipped."
                             : $"Files scanned: {filesScanned}. Protected folders may have been skipped."
@@ -1227,12 +1279,7 @@ public partial class MainWindow
         if (HuntResultsText != null)
             HuntResultsText.Text = sb.ToString();
 
-        // Refresh the Matches list with all rows we added
-        if (HuntResultsList != null)
-        {
-            HuntResultsList.ItemsSource = null;
-            HuntResultsList.ItemsSource = _huntResults.ToArray();
-        }
+        RefreshHuntResultsList();
 
         // Log to Hashes.log as before
         LogHashObserved(normalized, kind);

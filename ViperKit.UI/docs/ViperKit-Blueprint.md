@@ -1,400 +1,416 @@
-# ViperKit – Incident Response Portable Kit (Blueprint)
+# ViperKit — Master Blueprint v3.0
 
-**Goal:**  
-A GUI-based, portable incident response kit for non-cyber help desk techs to clean an infected workstation properly:
-
-- Find indicators of compromise (IOC).
-- Find and remove persistence.
-- Sweep for recent changes in risky locations.
-- Clean artifacts safely (with quarantine).
-- Harden the system after remediation.
-- Auto-build an exportable case file showing what was found, what was done, and the final clean state.
-
-Everything is designed to be **clickable, filterable, and readable** for Tier 1 / Tier 2 techs.
+**Owner:** Jeremy Tarkington
+**Codename:** ViperKit
+**Brand:** VENOMOUSVIPER
 
 ---
 
-## Core Tabs & Workflow
+## 1. Purpose
 
-Recommended run order (NOT forced in UI):
+ViperKit is a **portable, offline-first incident response toolkit** for Windows.
 
-1. Dashboard  
-2. Hunt  
-3. Persist  
-4. Sweep  
-5. Cleanup  
-6. Harden  
-7. Case  
-8. Help  
+**Target User:** MSP engineers, IT staff, and Tier 1/2 help desk technicians **without** a full-time security team or extensive cybersecurity experience.
 
-The Dashboard will clearly show this order and explain why, but the user can jump around as needed.
+ViperKit is a **guided incident workflow** that walks a tech from:
 
----
-
-## 1. Dashboard (Start Here)
-
-**Purpose:** Entry point + context + case control.
-
-### Responsibilities
-
-- Show host snapshot:
-  - Hostname
-  - Logged-in user
-  - OS + build
-  - Uptime
-- “Start Case” button:
-  - Creates a case ID (timestamp + host)
-  - Creates a case folder (e.g. `Cases\{CaseId}\`)
-  - Creates a case log file (JSON + human-readable text)
-- Show current case status:
-  - Not started / In progress / Completed
-- Quick navigation buttons:
-  - Open **Hunt**
-  - Open **Persist**
-  - Open **Sweep**
-  - Open **Cleanup**
-  - Open **Harden**
-  - Open **Case**
-- Instructions:
-  - “Recommended order” list: Dashboard → Hunt → Persist → Sweep → Cleanup → Harden → Case
-  - Short explanation of each tab.
-
-### Notes
-
-- Dashboard is the “home base”.
-- Case logging framework is initialized here and used by all other tabs.
+> "I think this box is compromised"
+> → Hunt for the bad tool
+> → Persist to see what keeps it alive
+> → Sweep to see what landed with it
+> → Cleanup to remove it safely
+> → Harden to prevent reinfection
+> → Case Export to document everything
 
 ---
 
-## 2. Hunt (IOC Discovery)
+## 2. What ViperKit Is NOT
 
-**Purpose:** Given a known bad thing (hash, file, domain, etc.), find where it exists on the system.
-
-### Inputs
-
-- IOC textbox: paste:
-  - File path (full or partial)
-  - Hash (MD5/SHA1/SHA256)
-  - Domain / URL
-  - IP address
-  - Registry key or value name
-- IOC type dropdown:
-  - Auto-detect
-  - File path
-  - Hash
-  - Domain/URL
-  - IP address
-  - Registry
-- Optional scope folder:
-  - Limit file scans to a folder tree (for speed / targeted hunts)
-
-### Surfaces to search
-
-- Filesystem:
-  - Whole drive or scoped folder
-  - Matching names, hashes, or paths
-- Registry:
-  - HKLM + HKCU core hives
-  - Autorun keys
-  - IFEO
-  - Services keys
-- Services & Drivers:
-  - Service name, ImagePath
-- Scheduled Tasks:
-  - Task names, actions (paths, arguments)
-- Hosts file, browser-related locations, etc. (future expansion)
-
-### Output
-
-Grid/table:
-
-- Category (File / Registry / Service / Task / Other)
-- Name (filename, service name, task name, reg value)
-- Path / Location (full path or registry path)
-- Details (hash, command line, arguments)
-- Severity (LOW / MEDIUM / HIGH)
-- Reason (why it’s flagged)
-- Actions:
-  - Open location (File Explorer / regedit)
-  - Add to Case evidence
-  - Send to Cleanup (mark for removal/quarantine)
-
-### Case Logging
-
-Every hunt:
-- Logs the IOC searched.
-- Logs hits found (category + path + severity).
-- If user adds something to evidence or cleanup, that action is added to the case log.
+- Not an AV/EDR replacement
+- Not automatic malware removal or "one-click fix everything"
+- Not cloud-dependent (core features work fully offline)
+- Not just a persistence scanner
 
 ---
 
-## 3. Persist (Persistence Map)
+## 3. Core Concept: Case Focus
 
-**Purpose:** Map all common persistence mechanisms, not just Run keys and Startup. This is where we find how the malware comes back.
+**Case Focus** is a global list of targets for the current investigation. Think of it as tags that follow you across all tabs.
 
-### Surfaces
+### Examples of Focus Items
+```
+ConnectWiseControl.Client.exe
+ScreenConnect Client
+LogMeIn
+powershell.exe
+C:\Program Files\EasyHelp\agent.exe
+```
 
-- Registry Autoruns:
-  - Run / RunOnce (HKLM, HKCU)
-  - RunServices / RunServicesOnce
-- Winlogon:
-  - Shell
-  - Userinit
-  - GINAs / Authentication packages
-- IFEO:
-  - `Image File Execution Options` Debugger hijacks
-- Services:
-  - Auto / System / Manual
-  - Third-party services
-- Drivers:
-  - Boot/system/non-MS drivers
-- Scheduled Tasks:
-  - All tasks from `C:\Windows\System32\Tasks`
-  - Registered tasks from Task Scheduler
-- Startup folders:
-  - Current user
-  - All users
-- WMI event consumers (future phase).
-- PowerShell profiles:
-  - All-host, all-user profiles
-- Browser extensions (Chrome/Edge/Firefox) (future phase).
-- Office startup macros (Word/Excel/Outlook) (future phase).
+### How Focus Works
 
-### Output
+1. **Focus is additive** — Items get added from any tab, never overwritten
+2. **Focus carries across tabs** — Set it in Hunt, see highlights in Persist and Sweep
+3. **Focus includes timestamps** — When focus target is a file path, its install time is captured for temporal clustering
 
-Grid/table:
-
-- Category (Reg:Run, Service, Driver, Task, Startup, Winlogon, etc.)
-- Name (value name, service name, task name)
-- Path / Command (exe path / script / argument)
-- Publisher / Company (if available)
-- Severity:
-  - HIGH: non-Microsoft from user-writable path, missing binary, suspicious locations
-  - MEDIUM: unknown publisher in autorun/persistence areas
-  - LOW: Microsoft or common legit entries
-- Reason:
-  - Human-readable explanation for severity.
-- Actions:
-  - Open location
-  - View properties
-  - Quarantine / disable (moves file to Quarantine and disables the autorun)
-  - Add to Case evidence
-
-### Case Logging
-
-- Every persistence scan writes:
-  - Count per category
-  - High/medium findings
-- Every change (disable, quarantine) is logged with:
-  - Before state
-  - After state
+### Adding to Focus
+- **Hunt:** Find suspicious item → "Add to focus"
+- **Persist:** See suspicious persistence → "Add to focus"
+- **Sweep:** See related artifact → "Add to focus"
 
 ---
 
-## 4. Sweep (Recent Change Radar)
+## 4. The Workflow
 
-**Purpose:** Show recent changes in risky areas that might represent installers, droppers, or new persistence artifacts.
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. HUNT     Find the bad thing (IOC, tool name, file)              │
+│              → Set as "Case Focus"                                  │
+│                                                                     │
+│  2. PERSIST  Check if the bad thing has persistence                 │
+│              → Services, autoruns, tasks highlighted if focus match │
+│                                                                     │
+│  3. SWEEP    Find OTHER things installed at the same time           │
+│              → Temporal clustering (±1-8h of focus target install)  │
+│              → Add related items to focus                           │
+│                                                                     │
+│  4. PERSIST  Re-run with expanded focus                             │
+│              → Now see persistence for ALL suspicious items         │
+│                                                                     │
+│  5. CLEANUP  Remove identified threats safely                       │
+│              → Preview → Export → Apply → Undo                      │
+│                                                                     │
+│  6. HARDEN   Prevent reinfection                                    │
+│              → Apply security controls based on what was found      │
+│                                                                     │
+│  7. CASE     Export full case report with timeline                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-### File-based sweep
+---
 
-Look in:
+## 5. Tab Specifications
 
-- Desktop (all users)
-- Downloads (all users)
-- AppData (Local, Roaming, LocalLow)
-- Temp folders
+### 5.1 Dashboard — COMPLETE
+
+**Role:** Entry point overview and case status.
+
+**Features:**
+- System snapshot (hostname, user, OS)
+- Case ID and event count
+- Last event summary
+- Case export button
+- Status messages
+
+**Behavior:**
+- Dashboard reflects the workflow, it doesn't control it
+- Updates automatically as events are logged
+
+---
+
+### 5.2 Hunt — COMPLETE
+
+**Role:** Find suspicious tools, binaries, and artifacts.
+
+**IOC Types:**
+| Type | What It Does |
+|------|--------------|
+| File/Path | Check existence, show metadata, calculate hashes (MD5/SHA1/SHA256) |
+| Hash | Identify hash type, optional disk scan for matches |
+| Domain/URL | DNS lookup, HTTP probe |
+| IP | Reverse DNS, ping test |
+| Registry | Open key, enumerate values |
+| Name/Keyword | Search processes, Program Files, ProgramData, scoped file search |
+
+**Actions:**
+- Run Hunt
+- Set as Case Focus (adds target to focus list)
+- Open Location
+- Copy Target
+- Save Results
+
+**Case Logging:**
+- All hunts logged with IOC, type, and results
+- Focus changes logged
+
+---
+
+### 5.3 Persist — COMPLETE
+
+**Role:** Map all persistence mechanisms and highlight focus matches.
+
+**Persistence Locations Scanned:**
+| Location | Details |
+|----------|---------|
+| Registry Run/RunOnce | HKCU + HKLM + Wow6432Node variants |
+| Winlogon | Shell, Userinit hijacks |
+| IFEO | Debugger hijacks |
+| AppInit_DLLs | DLL injection points |
+| Startup Folders | All users + current user |
+| Services & Drivers | Auto-start only |
+| Scheduled Tasks | All tasks with enabled triggers |
+| PowerShell Profiles | All profile locations |
+
+**Risk Assessment:**
+| Level | Meaning | Color |
+|-------|---------|-------|
+| CHECK | Needs investigation | Red |
+| NOTE | Informational (stale entry, etc.) | Amber |
+| OK | Normal/expected | Green |
+
+**High-Signal Detection:**
+- IFEO entries (always suspicious)
+- Winlogon modifications
+- AppInit_DLLs
+- PowerShell profiles
+- Suspicious paths in autoruns
+
+**Features:**
+- Summary panel with triage counts
+- Severity color badges
+- Focus highlighting (pink border)
+- MITRE ATT&CK mapping
+- Publisher extraction
+- Multiple filters (severity, location, text search)
+
+**Actions:**
+- Run Persistence Scan
+- Add to Focus
+- Add to Case
+- Investigate (open location/regedit)
+- Copy/Save Results
+
+---
+
+### 5.4 Sweep — COMPLETE
+
+**Role:** Find what else was installed around the same time as focus targets.
+
+**Scan Locations:**
+- All user profiles (Desktop, Downloads, AppData, Temp)
 - ProgramData
 - Startup folders
-- System32\Tasks (task definition files)
-- Other high-risk locations (to be defined as we refine logic).
+- Services & drivers
 
-Filter by time window:
+**File Types:**
+- Executables (.exe, .dll, .com, .scr, .sys)
+- Scripts (.ps1, .vbs, .js, .bat, .cmd)
+- Installers (.msi)
+- Archives (.zip, .7z, .rar, .iso)
 
-- 24 hours
-- 3 days
-- 7 days
-- 30 days
+**Severity Levels:**
+| Level | Criteria |
+|-------|----------|
+| HIGH | EXE/script/driver in Desktop/Downloads/Startup, or very recent (<4h) in AppData/Temp |
+| MEDIUM | Older EXE/script/driver in AppData/Temp, or DLLs there |
+| LOW | Everything else (still logged) |
 
-Filter by extension / type:
+**Clustering (Key Feature):**
 
-- Executables: `.exe`, `.com`, `.scr`
-- Scripts: `.ps1`, `.js`, `.jse`, `.vbs`, `.bat`, `.cmd`
-- Drivers: `.sys`
-- DLLs
-- Archives/installers: `.zip`, `.7z`, `.rar`, `.iso`, `.msi`
+When focus targets are set, Sweep performs clustering:
 
-### Registry & services sweep
+| Cluster Type | Border Color | Meaning |
+|--------------|--------------|---------|
+| Focus Match | Pink | Item name/path contains focus target term |
+| Time Cluster | Orange | Item modified within ±1-8h of focus target's timestamp |
+| Folder Cluster | Blue | Item is in same directory tree as focus target |
 
-- New or recently modified services/drivers.
-- New Run / RunOnce entries.
-- New scheduled tasks.
-- New IFEO entries.
+**Cluster Window:** Configurable: ±1h, ±2h, ±4h, ±8h
 
-### Output
+**Features:**
+- Summary panel with counts
+- Severity color badges
+- Focus targets display with timestamps
+- "Cluster hits only" filter
+- Investigate button (SHA256 hash + VirusTotal lookup)
 
-Grid/table:
-
-- Category: File / Service / Driver / Task / Registry
-- Severity:
-  - HIGH: new EXE/script/driver in Desktop/Downloads/Startup or very recent in AppData/Temp.
-  - MEDIUM: older but suspicious in AppData/Temp, DLLs in those paths, non-MS services/drivers changed recently.
-  - LOW: everything else that’s still worth seeing.
-- Name: filename, service name, task name, etc.
-- Path / Location
-- Modified time (and/or created time)
-- Reason: human explanation:
-  - e.g. `user-writable location, executable file, modified within last 4h`.
-- Actions:
-  - Open location
-  - Add to Case evidence
-  - Send to Cleanup
-
-### Case Logging
-
-- Records the window used and the counts.
-- Stores the list of MED/HIGH items (not all LOW noise).
-- If user marks items as interesting or adds to evidence, that’s logged.
+**Actions:**
+- Run Sweep
+- Add to Focus
+- Add to Case
+- Investigate (hash + VirusTotal)
+- Open Location
+- Copy/Save Results
 
 ---
 
-## 5. Cleanup (Post-removal Hygiene)
+### 5.5 Cleanup — NOT STARTED
 
-**Purpose:** Safely remove bad stuff and clean up leftover junk, with quarantine instead of hard delete.
+**Role:** Safely remove identified threats with undo capability.
 
-### Actions
+**Planned Features:**
+- Grouped by Case Target (ScreenConnect, EasyHelp, etc.)
+- Artifact types: Services, Tasks, Files/Folders, Registry keys
+- Preview → Export → Apply → Undo workflow
+- Manual-assist mode (v1) — ViperKit guides, operator removes
 
-- Quarantine selected files:
-  - Move to `Cases\{CaseId}\Quarantine\`
-  - Record original path + hash
-- Disable / remove persistence:
-  - Remove autorun registry entries (with backup in case file).
-  - Disable or delete scheduled tasks (export before delete).
-  - Disable or delete services (record original config).
-- Temp/Cache cleanup:
-  - Option to clear Temp folders.
-  - Cleanup browser cache/profile leftovers (future).
-- Browser extension removal (future).
-- Orphaned services/tasks cleanup where pointers are broken.
-
-### Case Logging
-
-- Every cleanup action:
-  - Who/what: type (file/registry/service/task)
-  - From where: original path/registry key
-  - Action: quarantined / disabled / removed
-  - Timestamp
+**Planned Actions:**
+| Action | Export First | Undo Capable |
+|--------|--------------|--------------|
+| Delete scheduled task | XML export | Yes |
+| Stop/disable service | Config export | Yes |
+| Quarantine file | Copy to quarantine folder | Yes |
+| Remove registry value | Key export | Yes |
 
 ---
 
-## 6. Harden (Aftercare)
+### 5.6 Harden — NOT STARTED
 
-**Purpose:** Lock down the host after infection so it’s less likely to get hit again.
+**Role:** Apply targeted defenses based on what was found.
 
-### Profiles
+**Planned Recommendations:**
+- For rogue RMMs: AppLocker/SRP rules, firewall restrictions
+- For scripts in Temp: Block execution from user-writable locations
+- For PowerShell abuse: Enable Script Block Logging
 
-1. Standard:
-   - Ensure Defender/AV is enabled.
-   - Ensure firewall is on.
-   - Disable Office macros by default.
-   - Block Office from running macros in external files (where applicable).
-2. Strict:
-   - All Standard steps.
-   - Disable PowerShell v2, logging configuration.
-   - Tighten RDP settings.
-   - Disable unsigned startup items.
-   - Additional hardening where possible.
-
-### Output
-
-- Shows which hardening actions were applied.
-- Allows toggling certain actions on/off before applying.
-
-### Case Logging
-
-- Lists every applied setting change and its before/after where feasible.
+**Planned Features:**
+- Standard/Strict profiles
+- Rollback capability
+- Integration with Case Targets
 
 ---
 
-## 7. Case (Evidence & Reporting)
+### 5.7 Case — PARTIAL
 
-**Purpose:** Single place to view everything done and export a professional incident report.
+**Role:** Timeline of everything that happened, exportable report.
 
-### Contains
+**Current Features:**
+- Event logging from all tabs
+- Text file export
 
-- General:
-  - Case ID
-  - Hostname
-  - User
-  - OS
-  - Time opened / time closed
-- Findings:
-  - IOC hits from Hunt
-  - Persistence entries that were flagged and/or changed
-  - Sweep findings that were promoted to evidence
-- Actions:
-  - Files quarantined (with hashes)
-  - Services/tasks/registry entries changed or removed
-  - Cleanup/hygiene steps run
-  - Harden profile applied + settings
-- Before/After:
-  - Summary of persistence map before cleanup vs after cleanup.
-  - Summary of sweep before/after if a second sweep is run as validation.
-
-### Export
-
-- Export options:
-  - HTML
-  - PDF (later)
-  - Zip case directory (logs + evidence)
-- Export content is **curated**:
-  - No raw dumps of every scan line
-  - Clear narrative:
-    - “What happened?”
-    - “What was found?”
-    - “What was done?”
-    - “What is the current state?”
+**Planned Features:**
+- Chronological timeline view
+- Case Targets list
+- HTML/Markdown report generation
+- Artifacts ZIP bundle
+- Operator notes
 
 ---
 
-## 8. Help (Guidance & Safety)
+### 5.8 Help — NOT STARTED
 
-**Purpose:** Built-in documentation aimed at Tier 1/2 techs.
+**Role:** Quick reference for operators.
 
-### Includes
-
-- Tab-overview:
-  - What each tab does
-  - When to use it
-- “How to read this screen” examples:
-  - Sample persistence entry annotated
-  - Sample sweep entry annotated
-- Safety rules:
-  - Always quarantine first, never hard delete.
-  - When to escalate to a security team.
-- Where logs and case files are stored.
+**Planned Content:**
+- Safety rules ("Preview everything, export before applying")
+- Tab-by-tab usage guide
+- Log/report locations
+- Keyboard shortcuts
 
 ---
 
-## UI Design Principles
+## 6. Example Workflow: Rogue RMM Cleanup
 
-- Dark theme with ViperKit branding (logo + accent color).
-- Clean, modern layout; **no raw walls of text**.
-- Each tab uses clear sections and grids/tables.
-- Columns are sortable (at least by Severity, Name, Category, Modified).
-- Filters:
-  - Severity filters
-  - Search bar per tab
-- One-click actions:
-  - Open location
-  - Add to case
-  - Quarantine/remove
-- No prior cybersecurity experience required to navigate.
+**Scenario:** Attacker installed ScreenConnect, EasyHelp, and PowerShell 7. ScreenConnect keeps coming back after "uninstall."
+
+### Step 1: Hunt
+```
+Search: "ScreenConnect"
+Find: ScreenConnect.ClientService.exe
+Action: Add to Focus
+
+Search: "EasyHelp"
+Find: C:\Program Files\EasyHelp\easyhelp.exe
+Action: Add to Focus
+
+Search: "PowerShell 7"
+Find: C:\Program Files\PowerShell\7\pwsh.exe
+Action: Add to Focus
+```
+
+### Step 2: Persist
+```
+Run: Persistence scan
+See:
+  - ScreenConnect service (highlighted - focus match)
+  - Scheduled task pointing to EasyHelp (highlighted)
+  - Run key for PowerShell 7 (highlighted)
+Action: Add suspicious entries to case log
+```
+
+### Step 3: Sweep
+```
+Settings: 7-day lookback, ±2h cluster window
+Run: Sweep scan
+See:
+  - ScreenConnect.Setup.msi (TIME CLUSTER - installed same time)
+  - helper.ps1 in AppData (TIME CLUSTER)
+  - EasyHelp DLLs (FOLDER CLUSTER)
+Action: Add installer and script to focus
+```
+
+### Step 4: Persist (Second Pass)
+```
+Run: Persistence scan again
+See: Additional persistence for newly-added focus items
+Result: Complete map of all persistence tied to the infection
+```
+
+### Step 5: Cleanup (Coming)
+```
+See: Grouped checklist by target
+  - ScreenConnect: 2 services, 1 task, 3 files
+  - EasyHelp: 1 service, 1 folder
+  - PowerShell 7: 1 run key
+Action: Remove each, mark as removed
+```
+
+### Step 6: Harden (Coming)
+```
+See: Recommendations based on findings
+  - Block known RMM paths in AppLocker
+  - Block execution in %TEMP%
+  - Enable Script Block Logging
+Action: Apply controls, mark as applied
+```
+
+### Step 7: Case Export
+```
+Action: Export case report
+Result: Complete narrative suitable for ticket/IR documentation
+```
 
 ---
 
-## Non-Goals
+## 7. Technical Implementation
 
-- This is not an EDR/AV replacement.
-- This is not fully autonomous malware removal.
-- This is not intended to process or manage *servers* or domain-wide remediation.
-- This is not a forensics suite; it’s a practical help-desk-grade IR kit with guardrails.
+### Case Manager API
+```csharp
+CaseManager.StartNewCase()              // Create new case with system snapshot
+CaseManager.SetFocusTarget(target, tab) // Add to focus list (appends, doesn't overwrite)
+CaseManager.GetFocusTargets()           // Get all focus items
+CaseManager.ClearFocus(tab)             // Clear all focus items
+CaseManager.AddEvent(tab, action, severity, target, details) // Log event
+CaseManager.ExportToFile()              // Generate case report
+```
+
+### Data Models
+
+**HuntResult:** Category, Target, Severity, Summary, Details
+
+**PersistItem:** Name, Path, RegistryPath, Source, LocationType, Risk, Reason, MitreTechnique, Publisher, IsFocusHit, RiskBackground, FocusBorderBrush
+
+**SweepEntry:** Category, Severity, Path, Name, Source, Reason, Modified, IsFocusHit, IsTimeCluster, IsFolderCluster, ClusterTarget, SeverityBackground, ClusterBorderBrush
+
+**CaseEvent:** Timestamp, Tab, Action, Severity, Target, Details
+
+---
+
+## 8. UI Design Principles
+
+1. **Summary panels first** — Show triage counts before the wall of data
+2. **Color badges** — Instant visual severity recognition
+3. **Focus highlighting** — Colored borders for focus/cluster matches
+4. **Filter, don't hide** — When filters yield zero, show all with status message
+5. **Actions at the bottom** — Consistent button placement across tabs
+6. **Case logging everywhere** — Every significant action recorded
+7. **Dark theme** — Professional look with VENOMOUSVIPER branding
+
+---
+
+## 9. Next Development Steps
+
+1. **Cleanup tab** — Safe removal workflow with undo
+2. **Harden tab** — Security profile application
+3. **Case tab** — Full timeline view and report generation
+4. **Help tab** — User documentation
+5. **Quick Hunt buttons** — Pre-built searches for common threats (RMMs, RATs, etc.)

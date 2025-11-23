@@ -1,22 +1,22 @@
-# ViperKit — Scope & Plan v1.0 (M0)
+# ViperKit — Scope & Plan v2.0
 
-**Owner:** Jeremy Tarkington  
-**Codename:** ViperKit  
+**Owner:** Jeremy Tarkington
+**Codename:** ViperKit
 **Brand:** VENOMOUSVIPER (teal-on-dark cyber theme)
 
 ---
 
 ## 0. Branding & Theme
 
-- Primary background: `#002E30` (dark teal)  
-- Accent / highlight: `#00FFFA` (Viper teal)  
-- Font style: clean, sans-serif (no goofy “gamer” fonts).  
-- Logo: `assets/Logo.png` (snake head + VENOMOUSVIPER tag).
+- Primary background: `#0B1518` (dark teal)
+- Accent / highlight: `#00FFFA` (Viper teal)
+- Font style: clean, sans-serif (no goofy "gamer" fonts)
+- Logo: `assets/Logo.png` (snake head + VENOMOUSVIPER tag)
 
 **Rules**
 
 - App should look like a serious incident tool, not a game launcher.
-- Logo + “ViperKit” branding visible on the main window / dashboard.
+- Logo + "ViperKit" branding visible on the main window / dashboard.
 - Theme should be consistent across every tab (no random colors later).
 
 ---
@@ -25,7 +25,7 @@
 
 ViperKit is a **portable, offline-first incident response toolkit** for Windows.
 
-Target user: MSP engineers or IT staff **without** a full-time security team.
+Target user: MSP engineers or IT staff **without** a full-time security team. Specifically designed for Tier 1/2 help desk technicians with little to no cybersecurity experience.
 
 ViperKit helps an operator:
 
@@ -43,404 +43,268 @@ ViperKit helps an operator:
 ## 2. Non-Goals (What ViperKit Is Not)
 
 - Not an AV/EDR replacement.
-- Not automatic malware removal or “one-click fix everything”.
+- Not automatic malware removal or "one-click fix everything".
 - Not cloud-dependent (core features must work fully **offline**).
-- Not “persistence-only” tooling.
-- No giant folder tree until a milestone actually needs it.
+- Not "persistence-only" tooling.
 
 ---
 
-## 3. Operating Modes
+## 3. Tech Stack
 
-**Phase 1 (current project):**
-
-- Windows portable app.
-- Tech stack: .NET 8 + Avalonia UI.
-- Packaging: Single self-contained EXE later via `dotnet publish`
-- Runs locally, elevated, from a single folder.
-
-**Phase 2 (future, separate track):**
-
-- Optional Linux boot media with a curated GUI toolkit for dead-box / offline work.
-- Not part of the current coding milestones.
+- **.NET 8** + **Avalonia UI**
+- Cross-platform framework, Windows-focused features
+- Single self-contained executable via `dotnet publish`
+- Runs locally, elevated, from a single folder
+- No internet required for core features
 
 ---
 
-## 4. UX & Navigation Contract
+## 4. Core Workflow
 
-**Main tabs (top or left navigation):**
+The "Case Focus" concept is central to ViperKit's workflow:
 
-- **Dashboard**
-- **Hunt**
-- **Persist**
-- **Sweep**
-- **Remediate**
-- **Cleanup**
-- **Harden**
-- **Case**
-- **Help**
+```
+1. HUNT    → Find suspicious item (ScreenConnect, malware.exe, etc.)
+             → Set as "Case Focus" (captures file path + timestamp)
 
-**Global concepts**
+2. PERSIST → Scan for persistence mechanisms
+             → Items matching focus are highlighted
+             → See if the suspicious item has autoruns, services, tasks
 
-- **Evidence Cart**  
-  Any finding (file, registry key, service, scheduled task, WMI item, etc.) can be added to an “Evidence” list with its type and context.
+3. SWEEP   → Scan recent file changes
+             → Temporal clustering finds files created ±1-8h of focus target
+             → "What else was installed at the same time?"
+             → Add related items to focus
 
-- **Preview / Undo**  
-  Every destructive or configuration-changing action:
-  - Shows exactly what will be done (commands, keys, files).
-  - Requires an export/snapshot before applying.
-  - Writes to an undo journal so the operator can roll back.
+4. PERSIST → Re-run with expanded focus
+             → Now see persistence for ALL suspicious items
 
-- **Trace View**  
-  When something is hunted, ViperKit shows basic relationships, for example:
-  - Task → runs → `C:\path\evil.exe`
-  - `evil.exe` → loads → `weird.dll`
-  - Service → binary path → non-system directory
+5. CLEANUP → Remove identified threats (Coming)
 
-- **Help View**  
-  One concise page with:
-  - Safety rules
-  - “How to use each tab” in plain language
-  - Where logs & reports are stored
-  - Keyboard shortcuts (once we add them)
+6. HARDEN  → Prevent reinfection (Coming)
+
+7. CASE    → Export full case report with timeline
+```
 
 ---
 
-## 5. Data Model (Kept Small & Clear)
+## 5. Milestone Status
 
-**Observable / IOC**
+### M0 — Plan & Wireframe: COMPLETE
+- Approved scope + UX map + acceptance tests per tab
+- Branding colors and assets defined
 
-- Hash, path, filename
-- URL, domain, IP
-- Registry key/value, CLSID
-- Service / task name
-- Process ID / image
+### M1 — Dashboard: COMPLETE
+- System snapshot (hostname, user, OS)
+- Case ID and event tracking
+- Case export functionality
+- Status display
 
-**Entity**
+### M2 — Hunt MVP: COMPLETE
+- IOC input with type selector (Auto, File/Path, Hash, Domain/URL, IP, Registry, Name/Keyword)
+- File/Path: existence check, metadata, hash calculation (MD5/SHA1/SHA256)
+- Hash: type identification, optional disk scan
+- Domain/URL: DNS lookup, HTTP probe
+- IP: reverse DNS, ping test
+- Registry: key enumeration, value display
+- Name/Keyword: process search, install folder search, scoped file search
+- Structured results list with severity levels
+- Case focus integration
+- Actions: open location, copy target, save results
+- Full case event logging
 
-- File, Directory
-- RegistryKey
-- Service
-- Scheduled Task
-- WMI (filter/consumer/binding)
-- COM object
-- NetworkRule / Firewall entry
-- User
+### M3 — Persist MVP: COMPLETE
+- Registry Run/RunOnce (HKCU/HKLM + Wow6432Node)
+- Winlogon Shell/Userinit hijacks
+- IFEO Debugger hijacks
+- AppInit_DLLs
+- Startup folders (all users + current user)
+- Services & Drivers (auto-start only)
+- Scheduled Tasks
+- PowerShell profiles
+- Risk assessment (OK/NOTE/CHECK) with color badges
+- High-signal detection for suspicious locations
+- MITRE ATT&CK technique mapping
+- Publisher extraction from executables
+- Summary panel with triage counts
+- Filters: severity, location type, text search
+- Focus highlighting with colored borders
+- Actions: investigate, add to case, add to focus, open location
 
-**Relation**
+### M4 — Sweep MVP: COMPLETE
+- Lookback window: 24h, 3d, 7d, 30d
+- Scan locations: all user profiles, ProgramData, Startup folders
+- Services & drivers scan
+- File type filtering (exe, dll, scripts, installers, archives)
+- Severity levels (HIGH/MEDIUM/LOW) based on location + type + age
+- Summary panel with triage counts
+- Severity color badges
+- Focus integration:
+  - Focus term matching (pink border)
+  - Temporal clustering ±1h to ±8h configurable (orange border)
+  - Folder clustering (blue border)
+  - "Cluster hits only" filter
+  - Focus targets display with timestamps
+- Actions: investigate (SHA256 + VirusTotal), add to case, add to focus, open location
+- Copy/save results, case event logging
 
-- `launches`
-- `loads`
-- `persists-via`
-- `drops`
-- `connects-to`
+### M5 — Cleanup MVP: NOT STARTED
+- Disable/delete scheduled tasks
+- Stop/disable services
+- Quarantine files
+- Remove autorun registry values
+- Preview → Export → Apply → Undo flow
 
-**Evidence**
+### M6 — Harden MVP: NOT STARTED
+- Standard/Strict security profiles
+- Defender preference toggles
+- Script engine restrictions
+- RDP/NLA configuration checks
+- Rollback capability
 
-- List of Entities + Observables + Relations
-- Timestamps
-- Operator notes
+### M7 — Case MVP: PARTIAL
+- Events logged throughout workflow
+- Case export to text file working
+- HTML/Markdown report generation (not started)
+- Artifacts ZIP bundle (not started)
 
-**Journal**
-
-- Ordered actions for undo/redo
-- Written to log files under `.\logs`
+### M8 — Help: NOT STARTED
+- Safety rules
+- Tab usage instructions
+- Log/report locations
+- Keyboard shortcuts
 
 ---
 
-## 6. Feature Specs per Tab (MVP = “Done means”)
+## 6. Feature Specs per Tab
 
-### 6.1 Dashboard
+### 6.1 Dashboard — COMPLETE
 
-**Goal:** Give the operator a starting point and status view.
+- ViperKit branding (logo + name)
+- System snapshot (hostname, user, OS)
+- Case summary (ID, event count, last event)
+- Case export button
+- Status messages
 
-MVP:
-
-- ViperKit branding (logo + name + brief description).
-- Quick explanation of each tab.
-- Link/buttons to:
-  - Open log folder
-  - Open generated reports folder
-  - View Help tab
-
-“Done” = A clean landing view with branding and simple instructions, no hidden actions.
-
----
-
-### 6.2 Hunt (IOC in → Findings out)
+### 6.2 Hunt — COMPLETE
 
 **Input types:**
-
-- Hash, URL, domain, IP
+- Hash (MD5/SHA1/SHA256)
+- URL, domain, IP
 - File path / filename
-- Registry key / CLSID
+- Registry key
+- Name/keyword search
 
-**Offline search targets:**
-
-- Filesystem:
-  - Known user/system dirs, including:
-    - `Users\<user>\AppData\Local`, `Roaming`, `Temp`
-    - `ProgramData`
-    - Startup folders
-- Registry autoruns & adjacent hives:
-  - `HKCU` / `HKLM\Software\Microsoft\Windows\CurrentVersion\Run*`
-  - Winlogon, IFEO, AppCertDlls, LSA, Shell extensions / CLSID
-- Scheduled tasks (including hidden)
-- Services and drivers
-- WMI (filters, consumers, bindings)
-- Browser startup locations & extensions (Chrome/Edge, per profile)
-- Hosts file / DNS cache for IP/domain
+**Search targets:**
+- Filesystem (user dirs, AppData, ProgramData, Temp)
+- Running processes
+- Program Files / ProgramData folders
+- Registry keys
+- Network (DNS, HTTP probes, ping)
 
 **Output:**
+- Structured results list with category, severity, summary
+- Actions: open location, copy target, set focus
+- Case event logging
 
-- Results grid with:
-  - Type (file, reg, service, task, etc.)
-  - Location (path / key)
-  - Source (which collector found it)
-  - Basic confidence or flags
-- **Trace View** listing relationships.
-- Button: **Add to Evidence**
+### 6.3 Persist — COMPLETE
 
-“Done” = Search works offline, shows hits with context, builds simple trace edges, and can add selected items to Evidence.
-
----
-
-### 6.3 Persist (Deep Persistence Map)
-
-**Coverage (MVP):**
-
+**Coverage:**
 - IFEO debuggers
-- AppCertDlls, Image Load
-- Winlogon (Shell/Userinit/Ginacmd)
-- LSA providers / SSP
-- KnownDlls hijack checks
-- COM hijacks (InprocServer32)
-- Shell extensions
-- WMI persistence (filters/consumers/bindings)
-- Services/Drivers (Auto + suspicious paths)
+- Winlogon (Shell/Userinit)
+- AppInit_DLLs
+- Services/Drivers (auto-start)
 - Scheduled Tasks
 - Startup folders
-- Run / RunOnce / RunServicesEx
-- Explorer shell keys
-- Script Host policies
-- PATH / DLL search order pitfalls
-- `netsh` helpers
-- Proxy/WPAD hooks
+- Run/RunOnce keys
+- PowerShell profiles
 
-**Heuristics:**
+**Features:**
+- Risk assessment (OK/NOTE/CHECK)
+- High-signal flagging
+- MITRE ATT&CK mapping
+- Publisher extraction
+- Summary panel with counts
+- Multiple filter options
+- Focus highlighting
 
-- Non-system directories for binaries
-- Alternate Data Streams
-- Invalid or missing signatures where applicable
+### 6.4 Sweep — COMPLETE
 
-**Actions:**
+**Features:**
+- Configurable lookback window
+- Multi-location scanning
+- Severity-based classification
+- Focus integration with temporal clustering
+- Configurable cluster window (±1h to ±8h)
+- VirusTotal integration via Investigate button
+- Summary panel with counts
 
-- Open location
-- Copy command / path
-- Add to Evidence
+### 6.5 Cleanup — NOT STARTED
 
-“Done” = One click enumerates persistence surface, tags suspicious entries, and supports Evidence collection.
+**Planned:**
+- Task removal with XML export
+- Service stop/disable with config export
+- File quarantine to `.\quarantine`
+- Registry value removal with key export
+- Preview → Apply → Undo flow
 
----
+### 6.6 Harden — NOT STARTED
 
-### 6.4 Sweep (Recent Change Radar)
+**Planned:**
+- Standard/Strict profiles
+- Defender settings
+- Script engine restrictions
+- RDP hardening
+- Rollback capability
 
-**MVP:**
+### 6.7 Case — PARTIAL
 
-- Time window slider (default: 7 days)
-- Looks for:
-  - Newly created/modified files in user-writable dirs
-  - New services / tasks
-  - New users / groups
-  - New firewall rules
-  - New browser extensions
-  - MSI installs / uninstalls (summary)
-  - Prefetch for new binaries
+**Current:**
+- Event logging from all tabs
+- Text file export
 
-**Output:**
+**Planned:**
+- HTML report generation
+- Markdown report generation
+- Artifacts ZIP bundle
+- Evidence table with notes
 
-- Sorted list with timestamps and artifact type
-- Add to Evidence
-- Export to CSV
+### 6.8 Help — NOT STARTED
 
-“Done” = Operator can see what changed recently and export a timeline.
-
----
-
-### 6.5 Remediate (Surgical, Reversible)
-
-**Playbooks (MVP):**
-
-- Disable/delete scheduled task
-  - Export task XML first
-- Stop/disable service
-  - Export config first if feasible
-- Quarantine file
-  - Copy to `.\quarantine`
-  - Unblock if needed
-  - Optionally replace with inert stub
-  - Kill process tree
-- Remove autorun registry value
-  - Export key first
-
-Each playbook flow: **Preview → Export → Apply → Undo**
-
-“Done” = Every action shows exact changes, forces an export snapshot, and can be rolled back from the journal.
-
----
-
-### 6.6 Cleanup (Post-Removal Hygiene)
-
-**MVP:**
-
-- Reset proxy/WPAD to default
-- Winsock reset (preview only; operator chooses when to run)
-- Remove orphaned autoruns
-- Purge droppers in known `Temp`/stash directories
-- Reset scheduled task cache entries for removed tasks
-
-“Done” = Preview list, Apply button, and undo where applicable. No silent destructive behavior.
-
----
-
-### 6.7 Harden (Quick Secure Profiles, Reversible)
-
-**Profiles:**
-
-- **Standard**
-- **Strict**
-
-**Possible controls (MVP):**
-
-- Defender preference toggles (where present)
-- Block Office macros from internet
-- Disable risky script engine autoruns for standard users
-- Fix common RDP / NLA misconfigs (no blind blanket “off”)
-- Enable SmartScreen where applicable
-- Basic SRP/AppLocker template for common dropper dirs
-
-“Done” = Applying a profile shows the planned GPO/registry changes and creates a rollback plan.
-
----
-
-### 6.8 Case (Report & Bundle)
-
-**MVP:**
-
-- Live Evidence table with:
-  - Type, path, source, relation notes
-  - Operator notes
-- Generate:
-  - HTML report
-  - Markdown report
-  - ZIP bundle with:
-    - Logs
-    - Exports
-    - Snapshots
-
-“Done” = One button produces a clean report and artifacts ZIP.
-
----
-
-### 6.9 Help
-
-**MVP Content:**
-
-- Short list of safety rules (e.g., “Preview everything; always export before applying.”)
-- Where logs live
-- Where reports are stored
-- One-liner description of each tab
-- Note: ViperKit is a manual assistant, not an automatic malware remover.
-
-“Done” = One page, fast to read, no scrolling novel.
+**Planned:**
+- Safety rules
+- Tab usage guide
+- Log locations
+- Keyboard shortcuts
 
 ---
 
 ## 7. Safety & Rollback
 
-- Preview-first and “require export before changes” **ON by default**.
-- Every action writes to an undo journal.
-- Logs stored under `.\logs` in the ViperKit folder.
-- Optional:
-  - Prompt to create a System Restore Point when supported (Windows client SKUs).
-  - Strict mode may require explicit operator confirmation.
+- Preview-first and "require export before changes" **ON by default**
+- Every destructive action writes to an undo journal
+- Logs stored under `.\logs` in the ViperKit folder
+- Case events track all significant actions
 
 ---
 
 ## 8. Packaging & Footprint
 
-- Single portable directory.
+- Single portable directory
 - Writes only to:
   - `.\logs`
   - `.\quarantine` (if used)
   - `.\exports` or `.\reports` (for outputs)
-- Must run elevated for many features, but:
-  - Clearly shows current privilege status.
-  - Refuses to run dangerous actions without elevation.
-- No internet required for core features.
-- Any later online lookups (VT, URL intel, etc.) are behind a clear toggle and **never block** offline flows.
+- Must run elevated for many features
+- No internet required for core features
+- VirusTotal lookups are optional and user-initiated
 
 ---
 
-## 9. Milestones & Acceptance Criteria
+## 9. Next Steps
 
-**M0 — Plan & Wireframe (THIS DOCUMENT)**
-
-- ✅ Approved scope + UX map + acceptance tests per tab.
-- ✅ Branding colors and assets defined.
-- Only repo files allowed at this stage:
-  - `PLAN.md`
-  - `README.md` (skeleton)
-  - `assets/Logo.png`
-  - `BRANDING.md` (optional at M0)
-
-**M1 — Hunt MVP**
-
-- Hunt tab UI file.
-- Hunt module (PowerShell).
-- Evidence integration.
-- Logging in place.
-- No destructive actions.
-
-**M2 — Persist MVP**
-
-- Deep autoruns & persistence map.
-- Suspicious heuristics.
-- Evidence integration.
-
-**M3 — Sweep MVP**
-
-- Time-window diff across artifacts.
-- CSV export.
-
-**M4 — Remediate MVP**
-
-- Four safe playbooks (task, service, file quarantine, autorun removal).
-- Export → apply → undo flow.
-
-**M5 — Cleanup MVP**
-
-- Hygiene tasks with preview/undo.
-
-**M6 — Harden MVP**
-
-- Two profiles (Standard/Strict) with rollback.
-
-**M7 — Case MVP**
-
-- Report generation (HTML/MD) + artifacts ZIP.
-
----
-
-## 10. Milestone Deliverables (Per PR)
-
-Every milestone PR must contain exactly:
-
-1. The UI definition for that tab only.
-2. One PowerShell module implementing that tab’s logic.
-3. Updated `CHANGELOG.md`.
-4. Updated `README.md` section for that feature.
-
-No extra folders or scripts until a milestone needs them.
-
----
+1. **Cleanup tab** — Implement safe removal workflow
+2. **Harden tab** — Security profile application
+3. **Case tab** — Full report generation
+4. **Help tab** — User documentation
+5. **Quick Hunt buttons** — Pre-built IOC searches for common threats

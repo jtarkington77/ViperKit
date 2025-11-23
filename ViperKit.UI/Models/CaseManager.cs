@@ -15,6 +15,9 @@ public static class CaseManager
     // Multi-target focus list for this case (ConnectWise, Steam, paths, etc.)
     private static readonly List<string> _focusTargets = new();
 
+    // Cleanup queue for items pending remediation
+    private static readonly List<CleanupItem> _cleanupQueue = new();
+
     public static string CaseId       { get; private set; } = string.Empty;
     public static DateTime StartedAt  { get; private set; }
     public static DateTime? EndedAt   { get; private set; }
@@ -29,6 +32,7 @@ public static class CaseManager
         {
             _events.Clear();
             _focusTargets.Clear();
+            _cleanupQueue.Clear();
             EndedAt = null;
 
             HostName      = Environment.MachineName;
@@ -37,6 +41,9 @@ public static class CaseManager
 
             CaseId    = $"{HostName}-{DateTime.Now:yyyyMMdd-HHmmss}";
             StartedAt = DateTime.Now;
+
+            // Initialize the cleanup journal for this case
+            CleanupJournal.Initialize(CaseId);
 
             _events.Add(new CaseEvent
             {
@@ -162,6 +169,148 @@ public static class CaseManager
                 Target    = string.Empty,
                 Details   = string.Empty
             });
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // CLEANUP QUEUE API – items pending remediation
+    // --------------------------------------------------------------------
+
+    /// <summary>
+    /// Add an item to the cleanup queue.
+    /// </summary>
+    public static void AddToCleanupQueue(CleanupItem item)
+    {
+        if (item == null)
+            return;
+
+        lock (_lock)
+        {
+            // Check if already queued (by original path)
+            if (_cleanupQueue.Exists(c =>
+                string.Equals(c.OriginalPath, item.OriginalPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return; // Already queued
+            }
+
+            _cleanupQueue.Add(item);
+
+            _events.Add(new CaseEvent
+            {
+                Timestamp = DateTime.Now,
+                Tab       = "Cleanup",
+                Action    = "Item added to cleanup queue",
+                Severity  = item.Severity,
+                Target    = item.Name,
+                Details   = $"Type: {item.ItemType}; Path: {item.OriginalPath}; From: {item.SourceTab}"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Remove an item from the cleanup queue.
+    /// </summary>
+    public static bool RemoveFromCleanupQueue(string itemId)
+    {
+        lock (_lock)
+        {
+            var item = _cleanupQueue.Find(c => c.Id == itemId);
+            if (item != null)
+            {
+                _cleanupQueue.Remove(item);
+
+                _events.Add(new CaseEvent
+                {
+                    Timestamp = DateTime.Now,
+                    Tab       = "Cleanup",
+                    Action    = "Item removed from cleanup queue",
+                    Severity  = "INFO",
+                    Target    = item.Name,
+                    Details   = $"Path: {item.OriginalPath}"
+                });
+
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get all items in the cleanup queue.
+    /// </summary>
+    public static IReadOnlyList<CleanupItem> GetCleanupQueue()
+    {
+        lock (_lock)
+        {
+            return _cleanupQueue.ToList();
+        }
+    }
+
+    /// <summary>
+    /// Get cleanup queue items filtered by status.
+    /// </summary>
+    public static IReadOnlyList<CleanupItem> GetCleanupQueueByStatus(string status)
+    {
+        lock (_lock)
+        {
+            return _cleanupQueue.FindAll(c =>
+                string.Equals(c.Status, status, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
+    /// Update the status of a cleanup item.
+    /// </summary>
+    public static void UpdateCleanupItemStatus(string itemId, string status, string? errorMessage = null)
+    {
+        lock (_lock)
+        {
+            var item = _cleanupQueue.Find(c => c.Id == itemId);
+            if (item != null)
+            {
+                item.Status = status;
+                if (status == "Completed" || status == "Failed")
+                    item.ExecutedAt = DateTime.Now;
+                if (!string.IsNullOrEmpty(errorMessage))
+                    item.ErrorMessage = errorMessage;
+
+                _events.Add(new CaseEvent
+                {
+                    Timestamp = DateTime.Now,
+                    Tab       = "Cleanup",
+                    Action    = $"Cleanup item {status.ToLower()}",
+                    Severity  = status == "Failed" ? "HIGH" : "INFO",
+                    Target    = item.Name,
+                    Details   = errorMessage ?? $"Action: {item.Action}"
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check if an item is already in the cleanup queue.
+    /// </summary>
+    public static bool IsInCleanupQueue(string originalPath)
+    {
+        lock (_lock)
+        {
+            return _cleanupQueue.Exists(c =>
+                string.Equals(c.OriginalPath, originalPath, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
+    /// Get cleanup queue statistics.
+    /// </summary>
+    public static (int total, int pending, int completed, int failed) GetCleanupStats()
+    {
+        lock (_lock)
+        {
+            int total = _cleanupQueue.Count;
+            int pending = _cleanupQueue.Count(c => c.Status == "Pending");
+            int completed = _cleanupQueue.Count(c => c.Status == "Completed");
+            int failed = _cleanupQueue.Count(c => c.Status == "Failed");
+            return (total, pending, completed, failed);
         }
     }
 

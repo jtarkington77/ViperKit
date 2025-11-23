@@ -144,6 +144,127 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// Async-friendly version that returns entries instead of adding to shared list.
+    /// </summary>
+    private List<SweepEntry> RunSweepServicesAndDriversAsync()
+    {
+        var entries = new List<SweepEntry>();
+
+        try
+        {
+            using var servicesRoot = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services");
+            if (servicesRoot == null)
+                return entries;
+
+            foreach (var serviceName in servicesRoot.GetSubKeyNames())
+            {
+                using var svcKey = servicesRoot.OpenSubKey(serviceName);
+                if (svcKey == null)
+                    continue;
+
+                string displayName = svcKey.GetValue("DisplayName")?.ToString() ?? "(no DisplayName)";
+                string rawImage    = svcKey.GetValue("ImagePath")?.ToString() ?? string.Empty;
+                string expanded    = Environment.ExpandEnvironmentVariables(rawImage ?? string.Empty);
+
+                string exePath  = ExtractExecutablePath(expanded);
+                bool   hasExe   = !string.IsNullOrWhiteSpace(exePath);
+                bool   exists   = hasExe && File.Exists(exePath);
+                bool   isDriver = exePath.EndsWith(".sys", StringComparison.OrdinalIgnoreCase);
+
+                int startRaw = svcKey.GetValue("Start") is int s ? s : -1;
+
+                bool flagged = false;
+                var reasons  = new List<string>();
+
+                // 1) Missing binary
+                if (!exists)
+                {
+                    flagged = true;
+                    reasons.Add("service/driver binary missing on disk");
+                }
+
+                // 2) Company info
+                string company = string.Empty;
+                if (exists)
+                {
+                    try
+                    {
+                        var vi = FileVersionInfo.GetVersionInfo(exePath);
+                        company = vi.CompanyName ?? string.Empty;
+                    }
+                    catch { }
+                }
+
+                bool isMicrosoft = company.Contains("Microsoft", StringComparison.OrdinalIgnoreCase);
+
+                // 3) Path-based risk
+                if (exists)
+                {
+                    string riskLabel = BuildRiskLabel(exePath, exists);
+                    if (riskLabel.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
+                    {
+                        flagged = true;
+                        reasons.Add(riskLabel.Replace("CHECK –", "").Trim());
+                    }
+                }
+
+                // 4) Non-MS drivers
+                if (isDriver && !isMicrosoft)
+                {
+                    flagged = true;
+                    reasons.Add("non-Microsoft driver");
+                }
+
+                // 5) Random-looking service names
+                if (serviceName.Length >= 20 && !serviceName.Contains(' ', StringComparison.Ordinal))
+                {
+                    flagged = true;
+                    reasons.Add("service name looks randomized");
+                }
+
+                // 6) Boot/System non-MS drivers
+                if ((startRaw == 0 || startRaw == 1) && !isMicrosoft && isDriver)
+                {
+                    flagged = true;
+                    reasons.Add("boot/system driver from non-Microsoft binary");
+                }
+
+                string severity = "LOW";
+                if (flagged)
+                {
+                    bool high = reasons.Exists(r =>
+                        r.Contains("missing on disk", StringComparison.OrdinalIgnoreCase) ||
+                        r.Contains("boot/system driver", StringComparison.OrdinalIgnoreCase));
+
+                    severity = high ? "HIGH" : "MEDIUM";
+                }
+
+                entries.Add(new SweepEntry
+                {
+                    Category = isDriver ? "Driver" : "Service",
+                    Severity = severity,
+                    Path     = exePath,
+                    Name     = serviceName,
+                    Source   = "Services/Drivers",
+                    Reason   = reasons.Count > 0 ? string.Join(", ", reasons) : string.Empty
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            entries.Add(new SweepEntry
+            {
+                Category = "Error",
+                Severity = "LOW",
+                Source   = "Services/Drivers",
+                Reason   = ex.Message
+            });
+        }
+
+        return entries;
+    }
+
         // Utility: build a simple risk label for service/driver binaries
     private static string BuildRiskLabel(string? path, bool existsOnDisk)
     {

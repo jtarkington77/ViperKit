@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using ViperKit.UI.Models;
 
 namespace ViperKit.UI.Views;
@@ -18,81 +20,218 @@ public partial class MainWindow
     // SWEEP TAB – RECENT CHANGE RADAR
     // =========================
 
-    private void SweepRunButton_OnClick(object? sender, RoutedEventArgs e)
+    private async void SweepRunButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (SweepStatusText != null)
-            SweepStatusText.Text = "Status: scanning for recent changes...";
+        // Disable button during scan to prevent double-clicks and show activity
+        if (sender is Button btn)
+            btn.IsEnabled = false;
 
-        _sweepEntries.Clear();
-
-        DateTime now    = DateTime.Now;
-        TimeSpan window = GetSweepLookbackWindow();
-        DateTime cutoff = now - window;
-
-        // File types worth caring about on a first pass 
-        var interestingExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ".exe", ".dll", ".com",
-            ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
-            ".scr", ".sys",
-            ".msi",
-            ".zip", ".7z", ".rar", ".iso"
-        };
-
-        // Build sweep roots across ALL user profiles + common paths
-        var roots = BuildSweepRoots();
-
-        foreach (var (label, path) in roots)
-        {
-            ScanSweepRoot(label, path, cutoff, now, interestingExts);
-        }
-
-        // Deep services + drivers (other partial uses _sweepEntries too)
-        RunSweepServicesAndDrivers();
-
-        // Apply focus matching and temporal clustering
-        ApplyFocusAndClustering();
-
-        BindSweepResults();
-
-        // Update summary panel counts
-        UpdateSweepSummaryCounts();
-
-        int total = _sweepEntries.Count;
-        int flagged = _sweepEntries.Count(entry =>
-            entry.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase) ||
-            entry.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
-        int clustered = _sweepEntries.Count(e => e.IsFocusHit || e.IsTimeCluster);
-
-        if (SweepStatusText != null)
-            SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} MED/HIGH, {clustered} cluster hit(s).";
-        
-        // Log into the case timeline
         try
         {
-            CaseManager.AddEvent(
-                tab: "Sweep",
-                action: "Sweep scan completed",
-                severity: flagged > 0 ? "WARN" : "INFO",
-                target: $"Items: {total}",
-                details: flagged > 0
-                    ? $"Flagged entries (MED/HIGH): {flagged}"
-                    : "No MED/HIGH entries found in sweep.");
-        }
-        catch
-        {
-        }
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: preparing sweep...";
 
-        // Update dashboard + case tab summaries
+            _sweepEntries.Clear();
+
+            DateTime now    = DateTime.Now;
+            TimeSpan window = GetSweepLookbackWindow();
+            DateTime cutoff = now - window;
+
+            // File types worth caring about on a first pass
+            var interestingExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".exe", ".dll", ".com",
+                ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
+                ".scr", ".sys",
+                ".msi",
+                ".zip", ".7z", ".rar", ".iso"
+            };
+
+            // Build sweep roots across ALL user profiles + common paths
+            var roots = BuildSweepRoots();
+            int totalRoots = roots.Count;
+            int currentRoot = 0;
+
+            // Scan each root on background thread with progress updates
+            foreach (var (label, path) in roots)
+            {
+                currentRoot++;
+                if (SweepStatusText != null)
+                    SweepStatusText.Text = $"Status: scanning {label}... ({currentRoot}/{totalRoots})";
+
+                // Run the heavy file enumeration on background thread
+                var entries = await Task.Run(() => ScanSweepRootAsync(label, path, cutoff, now, interestingExts));
+                _sweepEntries.AddRange(entries);
+            }
+
+            // Deep services + drivers scan
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: scanning services and drivers...";
+
+            var serviceEntries = await Task.Run(() => RunSweepServicesAndDriversAsync());
+            _sweepEntries.AddRange(serviceEntries);
+
+            // Apply focus matching and temporal clustering
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: applying clustering analysis...";
+
+            ApplyFocusAndClustering();
+
+            BindSweepResults();
+
+            // Update summary panel counts
+            UpdateSweepSummaryCounts();
+
+            int total = _sweepEntries.Count;
+            int flagged = _sweepEntries.Count(entry =>
+                entry.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase) ||
+                entry.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
+            int clustered = _sweepEntries.Count(e => e.IsFocusHit || e.IsTimeCluster);
+
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} MED/HIGH, {clustered} cluster hit(s).";
+
+            // Log into the case timeline
+            try
+            {
+                CaseManager.AddEvent(
+                    tab: "Sweep",
+                    action: "Sweep scan completed",
+                    severity: flagged > 0 ? "WARN" : "INFO",
+                    target: $"Items: {total}",
+                    details: flagged > 0
+                        ? $"Flagged entries (MED/HIGH): {flagged}"
+                        : "No MED/HIGH entries found in sweep.");
+            }
+            catch
+            {
+            }
+
+            // Update dashboard + case tab summaries
+            try
+            {
+                UpdateDashboardCaseSummary();
+                RefreshCaseTab();
+            }
+            catch
+            {
+            }
+        }
+        finally
+        {
+            // Re-enable button
+            if (sender is Button btn2)
+                btn2.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Async-friendly version of ScanSweepRoot that returns entries instead of adding to shared list.
+    /// </summary>
+    private List<SweepEntry> ScanSweepRootAsync(
+        string label,
+        string rootPath,
+        DateTime cutoff,
+        DateTime now,
+        HashSet<string> interestingExts)
+    {
+        var entries = new List<SweepEntry>();
+
         try
         {
-            UpdateDashboardCaseSummary();
-            RefreshCaseTab();
+            foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
+            {
+                DateTime created  = File.GetCreationTime(file);
+                DateTime modified = File.GetLastWriteTime(file);
+
+                // Respect the lookback window
+                if (created < cutoff && modified < cutoff)
+                    continue;
+
+                string ext = Path.GetExtension(file);
+                if (!interestingExts.Contains(ext))
+                    continue;
+
+                TimeSpan age     = now - modified;
+                string lowerPath = file.ToLowerInvariant();
+
+                bool inDesktop   = lowerPath.Contains(@"\desktop\");
+                bool inDownloads = lowerPath.Contains(@"\downloads\");
+                bool inStartup   = lowerPath.Contains(@"\startup\");
+                bool inAppData   = lowerPath.Contains(@"\appdata\");
+                bool inTemp      = lowerPath.Contains(@"\temp\");
+
+                bool hotLocation  = inDesktop || inDownloads || inStartup;
+                bool warmLocation = inAppData || inTemp;
+
+                bool isScript = ext is ".ps1" or ".js" or ".jse" or ".vbs" or ".bat" or ".cmd";
+                bool isExe    = ext is ".exe" or ".com";
+                bool isDriver = ext is ".sys";
+                bool isDll    = ext is ".dll";
+
+                var reasons = new List<string>();
+
+                if (hotLocation || warmLocation)
+                    reasons.Add("user-writable location");
+
+                if (isExe)
+                    reasons.Add("executable file");
+                else if (isDriver)
+                    reasons.Add("driver file");
+                else if (isScript)
+                    reasons.Add("script file");
+                else if (isDll)
+                    reasons.Add("DLL file");
+
+                if (age.TotalHours <= 24)
+                    reasons.Add("modified within last 24h");
+
+                // ----------------- SEVERITY RULES -----------------
+                string severity = "LOW";
+
+                // HIGH: EXE / script / driver in Desktop / Downloads / Startup
+                if (hotLocation && (isExe || isDriver || isScript))
+                {
+                    severity = "HIGH";
+                }
+                // HIGH: VERY recent EXE/script/driver in AppData/Temp (4h window)
+                else if (warmLocation && (isExe || isDriver || isScript) && age.TotalHours <= 4)
+                {
+                    severity = "HIGH";
+                }
+                // MEDIUM: older EXE/script/driver in AppData/Temp, or DLLs there
+                else if (warmLocation && (isExe || isDriver || isScript || isDll))
+                {
+                    severity = "MEDIUM";
+                }
+                // Everything else stays LOW – still logged.
+
+                var entry = new SweepEntry
+                {
+                    Category = "File",
+                    Severity = severity,
+                    Path     = file,
+                    Name     = Path.GetFileName(file),
+                    Source   = label,
+                    Reason   = reasons.Count > 0 ? string.Join(", ", reasons) : string.Empty,
+                    Modified = modified
+                };
+
+                entries.Add(entry);
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            entries.Add(new SweepEntry
+            {
+                Category = "Error",
+                Severity = "LOW",
+                Source   = label,
+                Reason   = ex.Message
+            });
         }
 
+        return entries;
     }
 
     private TimeSpan GetSweepLookbackWindow()
@@ -762,7 +901,7 @@ public partial class MainWindow
 
             if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = folder,
                     UseShellExecute = true
@@ -866,7 +1005,7 @@ public partial class MainWindow
 
             // Open VirusTotal search with the hash
             string vtUrl = $"https://www.virustotal.com/gui/search/{hash}";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            using var vtProcess = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = vtUrl,
                 UseShellExecute = true
@@ -888,5 +1027,56 @@ public partial class MainWindow
             if (SweepStatusText != null)
                 SweepStatusText.Text = $"Status: error investigating – {ex.Message}";
         }
+    }
+
+    // ----------------------------
+    // SWEEP – Add to Cleanup Queue
+    // ----------------------------
+    private void SweepAddToCleanupButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (SweepResultsList?.SelectedItem is not SweepEntry entry)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: select an item to add to cleanup queue.";
+            return;
+        }
+
+        // Check if already in queue
+        if (CaseManager.IsInCleanupQueue(entry.Path))
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: {entry.Name} is already in the cleanup queue.";
+            return;
+        }
+
+        // Determine item type and action based on Category
+        string itemType = entry.Category.ToLowerInvariant() switch
+        {
+            "service" => "Service",
+            "driver" => "Service", // Drivers are handled through service registry
+            _ => "File"
+        };
+
+        string action = itemType switch
+        {
+            "Service" => "Disable",
+            _ => "Quarantine"
+        };
+
+        var cleanupItem = new CleanupItem
+        {
+            ItemType = itemType,
+            Name = entry.Name,
+            OriginalPath = entry.Path,
+            SourceTab = "Sweep",
+            Severity = entry.Severity,
+            Reason = entry.Reason,
+            Action = action
+        };
+
+        CaseManager.AddToCleanupQueue(cleanupItem);
+
+        if (SweepStatusText != null)
+            SweepStatusText.Text = $"Status: {entry.Name} added to cleanup queue ({action}).";
     }
 }

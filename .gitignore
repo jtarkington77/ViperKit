@@ -37,3 +37,9 @@ publish/
 *.psm1~
 *.psd1~
 *.bak
+
+# ---- Claude Code / AI tooling ----
+.claude/
+
+# ---- Test artifacts (local testing only) ----
+test-artifacts/
