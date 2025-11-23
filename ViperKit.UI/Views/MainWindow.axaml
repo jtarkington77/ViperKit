@@ -635,7 +635,7 @@
                 <!-- SWEEP -->
                 <TabItem Header="Sweep">
                   <Grid Margin="16"
-                        RowDefinitions="Auto,Auto,*,Auto"
+                        RowDefinitions="Auto,Auto,Auto,*,Auto"
                         RowSpacing="8">
 
                     <!-- Title -->
@@ -645,8 +645,95 @@
                               FontWeight="SemiBold"
                               Margin="0,0,0,8"/>
 
+                    <!-- Summary / Triage Panel -->
+                    <Border Grid.Row="1"
+                            Background="#0A1214"
+                            CornerRadius="6"
+                            Padding="12"
+                            BorderBrush="#1A3C3F"
+                            BorderThickness="1">
+                        <StackPanel Spacing="8">
+                            <!-- Counts row -->
+                            <StackPanel Orientation="Horizontal" Spacing="24">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="#5A1E2C" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                        <TextBlock x:Name="SweepHighCount"
+                                                  Text="0"
+                                                  FontWeight="Bold"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="#FF9999" />
+                                    </Border>
+                                    <TextBlock Text="HIGH"
+                                              VerticalAlignment="Center"
+                                              Foreground="#C7D4D4" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="#4A3D16" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                        <TextBlock x:Name="SweepMediumCount"
+                                                  Text="0"
+                                                  FontWeight="Bold"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="#FFCC66" />
+                                    </Border>
+                                    <TextBlock Text="MEDIUM"
+                                              VerticalAlignment="Center"
+                                              Foreground="#C7D4D4" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="#1E3D2A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                        <TextBlock x:Name="SweepLowCount"
+                                                  Text="0"
+                                                  FontWeight="Bold"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="#99CC99" />
+                                    </Border>
+                                    <TextBlock Text="LOW"
+                                              VerticalAlignment="Center"
+                                              Foreground="#C7D4D4" />
+                                </StackPanel>
+
+                                <Separator Width="1" Background="#333" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="#5A2A5A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                        <TextBlock x:Name="SweepFocusMatchCount"
+                                                  Text="0"
+                                                  FontWeight="Bold"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="#FF99FF" />
+                                    </Border>
+                                    <TextBlock Text="Focus match"
+                                              VerticalAlignment="Center"
+                                              Foreground="#C7D4D4" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="#4A3A1A" CornerRadius="3" Padding="8,4" MinWidth="32">
+                                        <TextBlock x:Name="SweepTimeClusterCount"
+                                                  Text="0"
+                                                  FontWeight="Bold"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="#FFB347" />
+                                    </Border>
+                                    <TextBlock Text="Time cluster"
+                                              VerticalAlignment="Center"
+                                              Foreground="#C7D4D4" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Focus targets with timestamps -->
+                            <TextBlock x:Name="SweepFocusTargetsText"
+                                      Text="Focus targets: (none set)"
+                                      FontSize="11"
+                                      Foreground="#8FA9AA"
+                                      TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
                     <!-- Controls row -->
-                    <StackPanel Grid.Row="1"
+                    <StackPanel Grid.Row="2"
                                 Orientation="Horizontal"
                                 Spacing="12"
                                 VerticalAlignment="Center">
@@ -689,6 +776,29 @@
                                 Checked="SweepFilterCheckBox_OnChanged"
                                 Unchecked="SweepFilterCheckBox_OnChanged"/>
 
+                      <Separator Width="16" />
+
+                      <CheckBox x:Name="SweepShowClusterHitsOnlyCheckBox"
+                                Content="Cluster hits only"
+                                Margin="0"
+                                IsChecked="False"
+                                Checked="SweepFilterCheckBox_OnChanged"
+                                Unchecked="SweepFilterCheckBox_OnChanged"/>
+
+                      <TextBlock Text="Window:"
+                                VerticalAlignment="Center"
+                                Margin="8,0,0,0"/>
+
+                      <ComboBox x:Name="SweepClusterWindowCombo"
+                                Width="100"
+                                SelectedIndex="1"
+                                SelectionChanged="SweepClusterWindowCombo_OnSelectionChanged">
+                        <ComboBoxItem Content="± 1 hour" />
+                        <ComboBoxItem Content="± 2 hours" />
+                        <ComboBoxItem Content="± 4 hours" />
+                        <ComboBoxItem Content="± 8 hours" />
+                      </ComboBox>
+
                       <TextBlock x:Name="SweepStatusText"
                                 Margin="24,0,0,0"
                                 VerticalAlignment="Center"
@@ -696,7 +806,7 @@
                     </StackPanel>
 
                             <!-- Search + results -->
-                            <Grid Grid.Row="2"
+                            <Grid Grid.Row="3"
                                   RowDefinitions="Auto,*"
                                   RowSpacing="8">
 
@@ -712,24 +822,47 @@
                                       VerticalAlignment="Stretch">
                                 <ListBox.ItemTemplate>
                                   <DataTemplate x:DataType="models:SweepEntry">
-                                    <Border Margin="0,2"
-                                            Padding="6"
-                                            Background="#121b1f">
-                                      <StackPanel Spacing="2">
-                                          <!-- First line: severity, category, name -->
-                                          <TextBlock>
-                                            <Run Text="["/>
-                                            <Run Text="{Binding Category}" />
-                                            <Run Text="] " />
-                                            <Run Text="{Binding Severity}" />
-                                            <Run Text=" — " />
-                                            <Run Text="{Binding Name}" />
-                                          </TextBlock>
+                                    <Border Margin="0,4"
+                                            Padding="8"
+                                            CornerRadius="4"
+                                            Background="#121b1f"
+                                            BorderThickness="{Binding ClusterBorderThickness}"
+                                            BorderBrush="{Binding ClusterBorderBrush}">
+                                      <StackPanel Spacing="4">
+                                          <!-- Top line: Severity badge + cluster indicator + category -->
+                                          <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Border Padding="6,2"
+                                                    CornerRadius="3"
+                                                    Background="{Binding SeverityBackground}">
+                                              <TextBlock Text="{Binding Severity}"
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{Binding SeverityForeground}" />
+                                            </Border>
+
+                                            <Border Padding="6,2"
+                                                    CornerRadius="3"
+                                                    Background="#3A2A4A"
+                                                    IsVisible="{Binding HasClusterIndicator}">
+                                              <TextBlock Text="{Binding ClusterIndicator}"
+                                                        FontSize="10"
+                                                        FontWeight="Bold"
+                                                        Foreground="#FF99FF" />
+                                            </Border>
+
+                                            <TextBlock FontSize="11" VerticalAlignment="Center">
+                                              <Run Text="["/>
+                                              <Run Text="{Binding Category}" />
+                                              <Run Text="] " />
+                                              <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                                            </TextBlock>
+                                          </StackPanel>
 
                                           <!-- Path -->
                                           <TextBlock Text="{Binding Path}"
                                                     FontSize="11"
-                                                    Foreground="#c0c0c0" />
+                                                    Foreground="#c0c0c0"
+                                                    TextTrimming="CharacterEllipsis" />
 
                                           <!-- Modified + Source -->
                                           <TextBlock FontSize="11"
@@ -749,6 +882,14 @@
                                             <Run Text="{Binding Reason}"
                                                 Foreground="#ffd47f" />
                                           </TextBlock>
+
+                                          <!-- Cluster target if any -->
+                                          <TextBlock FontSize="10"
+                                                    Foreground="#9090B0"
+                                                    IsVisible="{Binding HasClusterIndicator}">
+                                            <Run Text="Clusters with: " />
+                                            <Run Text="{Binding ClusterTarget}" FontWeight="SemiBold" />
+                                          </TextBlock>
                                         </StackPanel>
 
                                     </Border>
@@ -758,7 +899,7 @@
                             </Grid>
 
                     <!-- Buttons -->
-                    <StackPanel Grid.Row="3"
+                    <StackPanel Grid.Row="4"
                                 Orientation="Horizontal"
                                 Spacing="8"
                                 HorizontalAlignment="Left">
@@ -768,6 +909,12 @@
                       <Button x:Name="SweepSaveResultsButton"
                               Content="Save Snapshot"
                               Click="SweepSaveResultsButton_OnClick"/>
+                      <Button x:Name="SweepAddToFocusButton"
+                              Content="Add selected to focus"
+                              Click="SweepAddToFocusButton_OnClick"/>
+                      <Button x:Name="SweepOpenLocationButton"
+                              Content="Open location"
+                              Click="SweepOpenLocationButton_OnClick"/>
                     </StackPanel>
 
                   </Grid>

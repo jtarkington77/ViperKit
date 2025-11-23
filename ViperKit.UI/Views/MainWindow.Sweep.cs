@@ -50,15 +50,22 @@ public partial class MainWindow
         // Deep services + drivers (other partial uses _sweepEntries too)
         RunSweepServicesAndDrivers();
 
+        // Apply focus matching and temporal clustering
+        ApplyFocusAndClustering();
+
         BindSweepResults();
+
+        // Update summary panel counts
+        UpdateSweepSummaryCounts();
 
         int total = _sweepEntries.Count;
         int flagged = _sweepEntries.Count(entry =>
             entry.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase) ||
             entry.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
+        int clustered = _sweepEntries.Count(e => e.IsFocusHit || e.IsTimeCluster);
 
         if (SweepStatusText != null)
-            SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} MED/HIGH.";
+            SweepStatusText.Text = $"Status: sweep complete – {total} item(s), {flagged} MED/HIGH, {clustered} cluster hit(s).";
         
         // Log into the case timeline
         try
@@ -333,6 +340,13 @@ public partial class MainWindow
                 (!string.IsNullOrEmpty(entry.Reason) && entry.Reason.Contains(term, StringComparison.OrdinalIgnoreCase)));
         }
 
+        // 4) Show cluster hits only (focus match, time cluster, or folder cluster)
+        if (SweepShowClusterHitsOnlyCheckBox?.IsChecked == true)
+        {
+            source = source.Where(entry =>
+                entry.IsFocusHit || entry.IsTimeCluster || entry.IsFolderCluster);
+        }
+
         // DataGrid binds directly to SweepEntry properties
         SweepResultsList.ItemsSource = source.ToList();
     }
@@ -345,6 +359,17 @@ public partial class MainWindow
     private void SweepSeverityFilterCombo_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         BindSweepResults();
+    }
+
+    private void SweepClusterWindowCombo_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // Re-apply clustering with the new window and rebind
+        if (_sweepEntries.Count > 0)
+        {
+            ApplyFocusAndClustering();
+            UpdateSweepSummaryCounts();
+            BindSweepResults();
+        }
     }
 
     private void SweepSearchTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
@@ -448,6 +473,314 @@ public partial class MainWindow
         {
             if (SweepStatusText != null)
                 SweepStatusText.Text = $"Status: error saving snapshot – {ex.Message}";
+        }
+    }
+
+    // ---- Focus and temporal clustering ----
+
+    /// <summary>
+    /// Apply focus matching and temporal clustering to sweep entries.
+    /// - Focus match: entry name/path contains a focus target term
+    /// - Time cluster: entry was modified within the configurable window of a focus target's timestamp
+    /// </summary>
+    private void ApplyFocusAndClustering()
+    {
+        // Reset all clustering flags first (important when re-applying with new window)
+        foreach (var entry in _sweepEntries)
+        {
+            entry.IsFocusHit = false;
+            entry.IsTimeCluster = false;
+            entry.IsFolderCluster = false;
+            entry.ClusterTarget = string.Empty;
+        }
+
+        var focusTargets = CaseManager.GetFocusTargets();
+        if (focusTargets.Count == 0)
+            return;
+
+        // Build a list of focus target timestamps (for files that exist)
+        var focusTimestamps = new List<(string Target, DateTime Timestamp)>();
+
+        foreach (var target in focusTargets)
+        {
+            // If the focus target is a file path, get its timestamp
+            if (File.Exists(target))
+            {
+                try
+                {
+                    DateTime modified = File.GetLastWriteTime(target);
+                    focusTimestamps.Add((target, modified));
+                }
+                catch { }
+            }
+            // Also check if it's a directory
+            else if (Directory.Exists(target))
+            {
+                try
+                {
+                    DateTime modified = Directory.GetLastWriteTime(target);
+                    focusTimestamps.Add((target, modified));
+                }
+                catch { }
+            }
+        }
+
+        // Clustering window: configurable via dropdown (default ±2 hours)
+        TimeSpan clusterWindow = GetClusterWindow();
+
+        foreach (var entry in _sweepEntries)
+        {
+            // Check for direct focus term match (name or path contains focus target)
+            foreach (var target in focusTargets)
+            {
+                if (!string.IsNullOrEmpty(entry.Name) &&
+                    entry.Name.Contains(target, StringComparison.OrdinalIgnoreCase))
+                {
+                    entry.IsFocusHit = true;
+                    entry.ClusterTarget = target;
+                    break;
+                }
+
+                if (!string.IsNullOrEmpty(entry.Path) &&
+                    entry.Path.Contains(target, StringComparison.OrdinalIgnoreCase))
+                {
+                    entry.IsFocusHit = true;
+                    entry.ClusterTarget = target;
+                    break;
+                }
+            }
+
+            // Check for temporal clustering (if entry has a modified time)
+            if (!entry.IsFocusHit && entry.Modified.HasValue)
+            {
+                foreach (var (target, timestamp) in focusTimestamps)
+                {
+                    TimeSpan diff = (entry.Modified.Value - timestamp).Duration();
+                    if (diff <= clusterWindow)
+                    {
+                        entry.IsTimeCluster = true;
+                        entry.ClusterTarget = Path.GetFileName(target);
+                        break;
+                    }
+                }
+            }
+
+            // Check for folder clustering (same directory tree as a focus target)
+            if (!entry.IsFocusHit && !entry.IsTimeCluster && !string.IsNullOrEmpty(entry.Path))
+            {
+                foreach (var target in focusTargets)
+                {
+                    if (File.Exists(target) || Directory.Exists(target))
+                    {
+                        string? focusDir = File.Exists(target)
+                            ? Path.GetDirectoryName(target)
+                            : target;
+
+                        if (!string.IsNullOrEmpty(focusDir) &&
+                            entry.Path.StartsWith(focusDir, StringComparison.OrdinalIgnoreCase))
+                        {
+                            entry.IsFolderCluster = true;
+                            entry.ClusterTarget = Path.GetFileName(target);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Update the summary panel counts for quick triage.
+    /// </summary>
+    private void UpdateSweepSummaryCounts()
+    {
+        try
+        {
+            int highCount = _sweepEntries.Count(e =>
+                e.Severity.Equals("HIGH", StringComparison.OrdinalIgnoreCase));
+            if (SweepHighCount != null)
+                SweepHighCount.Text = highCount.ToString();
+
+            int mediumCount = _sweepEntries.Count(e =>
+                e.Severity.Equals("MEDIUM", StringComparison.OrdinalIgnoreCase));
+            if (SweepMediumCount != null)
+                SweepMediumCount.Text = mediumCount.ToString();
+
+            int lowCount = _sweepEntries.Count(e =>
+                e.Severity.Equals("LOW", StringComparison.OrdinalIgnoreCase));
+            if (SweepLowCount != null)
+                SweepLowCount.Text = lowCount.ToString();
+
+            int focusCount = _sweepEntries.Count(e => e.IsFocusHit);
+            if (SweepFocusMatchCount != null)
+                SweepFocusMatchCount.Text = focusCount.ToString();
+
+            int timeClusterCount = _sweepEntries.Count(e => e.IsTimeCluster);
+            if (SweepTimeClusterCount != null)
+                SweepTimeClusterCount.Text = timeClusterCount.ToString();
+
+            // Update focus targets display with timestamps
+            UpdateFocusTargetsDisplay();
+        }
+        catch
+        {
+            // Summary updates should never break UI
+        }
+    }
+
+    /// <summary>
+    /// Get the clustering time window from the dropdown.
+    /// </summary>
+    private TimeSpan GetClusterWindow()
+    {
+        int index = SweepClusterWindowCombo?.SelectedIndex ?? 1;
+        return index switch
+        {
+            0 => TimeSpan.FromHours(1),
+            1 => TimeSpan.FromHours(2),
+            2 => TimeSpan.FromHours(4),
+            3 => TimeSpan.FromHours(8),
+            _ => TimeSpan.FromHours(2)
+        };
+    }
+
+    /// <summary>
+    /// Update the focus targets text with timestamps.
+    /// </summary>
+    private void UpdateFocusTargetsDisplay()
+    {
+        if (SweepFocusTargetsText == null)
+            return;
+
+        var focusTargets = CaseManager.GetFocusTargets();
+        if (focusTargets.Count == 0)
+        {
+            SweepFocusTargetsText.Text = "Focus targets: (none set – set focus in Hunt tab first)";
+            return;
+        }
+
+        var parts = new List<string>();
+        foreach (var target in focusTargets)
+        {
+            string display = target;
+            DateTime? timestamp = null;
+
+            // Try to get timestamp for file or directory
+            if (File.Exists(target))
+            {
+                try
+                {
+                    timestamp = File.GetLastWriteTime(target);
+                    display = $"{Path.GetFileName(target)} ({timestamp:yyyy-MM-dd HH:mm})";
+                }
+                catch { }
+            }
+            else if (Directory.Exists(target))
+            {
+                try
+                {
+                    timestamp = Directory.GetLastWriteTime(target);
+                    display = $"{Path.GetFileName(target)} ({timestamp:yyyy-MM-dd HH:mm})";
+                }
+                catch { }
+            }
+            else
+            {
+                // Just a keyword, no timestamp
+                display = target;
+            }
+
+            parts.Add(display);
+        }
+
+        SweepFocusTargetsText.Text = $"Focus targets: {string.Join(" | ", parts)}";
+    }
+
+    // ---- Button handlers ----
+
+    private void SweepAddToFocusButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (SweepResultsList?.SelectedItem is not SweepEntry entry)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: select an item to add to focus.";
+            return;
+        }
+
+        // Add the file name (or path if no name) to focus
+        string target = !string.IsNullOrEmpty(entry.Name) ? entry.Name : entry.Path;
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: selected item has no name or path.";
+            return;
+        }
+
+        CaseManager.SetFocusTarget(target, "Sweep");
+
+        if (SweepStatusText != null)
+            SweepStatusText.Text = $"Status: added '{target}' to case focus.";
+
+        // Log the action
+        try
+        {
+            CaseManager.AddEvent(
+                tab: "Sweep",
+                action: "Added to focus from sweep",
+                severity: "INFO",
+                target: target,
+                details: $"Path: {entry.Path}");
+
+            UpdateDashboardCaseSummary();
+            RefreshCaseTab();
+        }
+        catch { }
+    }
+
+    private void SweepOpenLocationButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (SweepResultsList?.SelectedItem is not SweepEntry entry)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: select an item to open its location.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(entry.Path))
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = "Status: selected item has no path.";
+            return;
+        }
+
+        try
+        {
+            string? folder = File.Exists(entry.Path)
+                ? Path.GetDirectoryName(entry.Path)
+                : (Directory.Exists(entry.Path) ? entry.Path : null);
+
+            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+
+                if (SweepStatusText != null)
+                    SweepStatusText.Text = $"Status: opened {folder}";
+            }
+            else
+            {
+                if (SweepStatusText != null)
+                    SweepStatusText.Text = "Status: folder not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (SweepStatusText != null)
+                SweepStatusText.Text = $"Status: error opening location – {ex.Message}";
         }
     }
 }
