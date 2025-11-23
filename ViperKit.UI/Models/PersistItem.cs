@@ -15,7 +15,7 @@ namespace ViperKit.UI.Models
         public string MitreTechnique { get; set; } = string.Empty;
         public string Publisher { get; set; } = string.Empty;
 
-        // ---- UI helper properties (no logic in XAML) ----
+        // ---- UI helper properties for filtering and highlighting ----
 
         // True when this entry matches the current case focus terms
         public bool IsFocusHit { get; set; }

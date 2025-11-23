@@ -1,8 +1,9 @@
-# ViperKit — Scope & Plan v2.0
+# ViperKit — Scope & Plan v3.0
 
 **Owner:** Jeremy Tarkington
 **Codename:** ViperKit
 **Brand:** VENOMOUSVIPER (teal-on-dark cyber theme)
+**Last Updated:** 2024-11-23
 
 ---
 
@@ -27,16 +28,15 @@ ViperKit is a **portable, offline-first incident response toolkit** for Windows.
 
 Target user: MSP engineers or IT staff **without** a full-time security team. Specifically designed for Tier 1/2 help desk technicians with little to no cybersecurity experience.
 
-ViperKit helps an operator:
+ViperKit provides a **guided incident workflow**:
 
-1. **Hunt** IOCs and suspicious artifacts.
-2. Map deep **Persistence** mechanisms (not just Run keys).
-3. **Sweep** for recent changes and potential droppers.
-4. **Remediate** in a controlled, reversible way.
-5. **Clean up** leftovers and reset broken hygiene.
-6. **Harden** the endpoint with a reversible secure profile.
-7. Bundle a **Case** report and evidence.
-8. Access a simple **Help** view with rules and shortcuts.
+> "I think this box is compromised"
+> → Hunt for the bad tool
+> → Persist to see what keeps it alive
+> → Sweep to see what landed with it
+> → Cleanup to remove it safely
+> → Harden to prevent reinfection
+> → Case Export to document everything
 
 ---
 
@@ -51,7 +51,7 @@ ViperKit helps an operator:
 
 ## 3. Tech Stack
 
-- **.NET 8** + **Avalonia UI**
+- **.NET 9** + **Avalonia UI**
 - Cross-platform framework, Windows-focused features
 - Single self-contained executable via `dotnet publish`
 - Runs locally, elevated, from a single folder
@@ -79,7 +79,8 @@ The "Case Focus" concept is central to ViperKit's workflow:
 4. PERSIST → Re-run with expanded focus
              → Now see persistence for ALL suspicious items
 
-5. CLEANUP → Remove identified threats (Coming)
+5. CLEANUP → Remove identified threats safely
+             → Preview → Execute → Undo if needed
 
 6. HARDEN  → Prevent reinfection (Coming)
 
@@ -129,7 +130,7 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Summary panel with triage counts
 - Filters: severity, location type, text search
 - Focus highlighting with colored borders
-- Actions: investigate, add to case, add to focus, open location
+- Actions: investigate, add to case, add to focus, add to cleanup
 
 ### M4 — Sweep MVP: COMPLETE
 - Lookback window: 24h, 3d, 7d, 30d
@@ -145,15 +146,24 @@ The "Case Focus" concept is central to ViperKit's workflow:
   - Folder clustering (blue border)
   - "Cluster hits only" filter
   - Focus targets display with timestamps
-- Actions: investigate (SHA256 + VirusTotal), add to case, add to focus, open location
+- Actions: investigate (SHA256 + VirusTotal), add to case, add to focus, add to cleanup
 - Copy/save results, case event logging
 
-### M5 — Cleanup MVP: NOT STARTED
-- Disable/delete scheduled tasks
-- Stop/disable services
-- Quarantine files
-- Remove autorun registry values
-- Preview → Export → Apply → Undo flow
+### M5 — Cleanup MVP: COMPLETE
+- Queue items from Persist and Sweep tabs
+- Execute all pending / execute selected
+- Quarantine files (move to safe location)
+- Disable services (stop + set Start=4)
+- Disable scheduled tasks (schtasks /Disable)
+- Backup and delete registry keys (reg export + delete)
+- Full undo capability:
+  - Restore quarantined files
+  - Re-enable services
+  - Restore registry keys from backup
+- Journal-based tracking with JSON persistence
+- Stats display (total, pending, completed, failed)
+- Open quarantine folder
+- Remove from queue / clear queue
 
 ### M6 — Harden MVP: NOT STARTED
 - Standard/Strict security profiles
@@ -174,6 +184,18 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Log/report locations
 - Keyboard shortcuts
 
+### M9 — Demo Mode: PLANNED
+- Guided walkthrough for training and POC
+- Create harmless test artifacts
+- Step-by-step guide through full workflow
+- Auto-cleanup at demo end
+
+### M10 — PowerShell History: PLANNED
+- Scan PSReadLine history files
+- Windows PowerShell + PowerShell 7 support
+- Risk scoring (HIGH/MEDIUM/LOW)
+- Base64 decoding for encoded commands
+
 ---
 
 ## 6. Feature Specs per Tab
@@ -185,6 +207,7 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Case summary (ID, event count, last event)
 - Case export button
 - Status messages
+- **Demo Mode panel** (planned)
 
 ### 6.2 Hunt — COMPLETE
 
@@ -227,6 +250,17 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Summary panel with counts
 - Multiple filter options
 - Focus highlighting
+- Add to Cleanup queue
+
+**PowerShell History Analysis (planned):**
+- Scan PSReadLine history for all users
+- Windows PowerShell 5.1 + PowerShell 7
+- Risk scoring:
+  - HIGH: Invoke-WebRequest+IEX, encoded commands, DownloadString
+  - MEDIUM: Set-ExecutionPolicy, New-ScheduledTask, service commands
+  - LOW: Normal commands
+- Base64 decoding for -enc commands
+- Add suspicious commands to case notes
 
 ### 6.4 Sweep — COMPLETE
 
@@ -238,15 +272,25 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Configurable cluster window (±1h to ±8h)
 - VirusTotal integration via Investigate button
 - Summary panel with counts
+- Add to Cleanup queue
 
-### 6.5 Cleanup — NOT STARTED
+### 6.5 Cleanup — COMPLETE
 
-**Planned:**
-- Task removal with XML export
-- Service stop/disable with config export
-- File quarantine to `.\quarantine`
-- Registry value removal with key export
-- Preview → Apply → Undo flow
+**Actions:**
+| Action | Backup | Undo Capable |
+|--------|--------|--------------|
+| Quarantine file | Move to quarantine folder | Yes |
+| Disable service | Record original Start value | Yes |
+| Disable scheduled task | N/A | Yes (re-enable) |
+| Delete registry key | Export to .reg file | Yes |
+
+**Features:**
+- Queue management (add, remove, clear)
+- Execute all / execute selected
+- Undo last / undo selected
+- Journal persistence (JSON)
+- Quarantine folder per case
+- Stats display
 
 ### 6.6 Harden — NOT STARTED
 
@@ -277,6 +321,33 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Log locations
 - Keyboard shortcuts
 
+### 6.9 Demo Mode — PLANNED
+
+**Role:** Guided walkthrough for training and proof-of-concept.
+
+**Artifacts to Create:**
+| Artifact | Type | Path |
+|----------|------|------|
+| DemoRMM.exe | File | `%ProgramFiles%\ViperKit_Demo\DemoRMM.exe` |
+| helper.ps1 | Script | `%TEMP%\ViperKit_Demo\helper.ps1` |
+| DemoRMM Run Key | Registry | `HKCU\...\Run\DemoRMM` |
+| DemoTask | Task | `\ViperKit_Demo\DemoTask` (disabled) |
+| config.dat | File | `%APPDATA%\ViperKit_Demo\config.dat` |
+
+**Walkthrough Steps:**
+1. Hunt — Search "DemoRMM", set as focus
+2. Persist — See highlighted Run key and task
+3. Sweep — See clustered demo files
+4. Add to Cleanup — Queue items
+5. Cleanup — Execute removal
+6. Complete — Summary of what was learned
+
+**Safety:**
+- All paths include "ViperKit_Demo" folder
+- Task created disabled (never runs)
+- Executables are empty/benign
+- Full cleanup guaranteed at end
+
 ---
 
 ## 7. Safety & Rollback
@@ -284,6 +355,7 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Preview-first and "require export before changes" **ON by default**
 - Every destructive action writes to an undo journal
 - Logs stored under `.\logs` in the ViperKit folder
+- Quarantine folder: `C:\ViperKit_Quarantine\{CaseId}\`
 - Case events track all significant actions
 
 ---
@@ -293,7 +365,7 @@ The "Case Focus" concept is central to ViperKit's workflow:
 - Single portable directory
 - Writes only to:
   - `.\logs`
-  - `.\quarantine` (if used)
+  - `C:\ViperKit_Quarantine` (for quarantined files)
   - `.\exports` or `.\reports` (for outputs)
 - Must run elevated for many features
 - No internet required for core features
@@ -301,10 +373,10 @@ The "Case Focus" concept is central to ViperKit's workflow:
 
 ---
 
-## 9. Next Steps
+## 9. Next Development Steps
 
-1. **Cleanup tab** — Implement safe removal workflow
-2. **Harden tab** — Security profile application
-3. **Case tab** — Full report generation
+1. **PowerShell History Analysis** — Add to Persist tab (high forensic value)
+2. **Demo Mode** — Add to Dashboard (training and POC capability)
+3. **Harden tab** — Security profile application
 4. **Help tab** — User documentation
-5. **Quick Hunt buttons** — Pre-built IOC searches for common threats
+5. **Case tab enhancements** — HTML reports, artifacts ZIP

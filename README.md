@@ -2,38 +2,58 @@
 
 **ViperKit** is a portable, offline-first **incident response toolkit** for Windows, built for MSPs and IT teams that don't have a full-time security staff.
 
-It helps an operator:
+**Target Users:** Tier 1/2 help desk technicians and MSP engineers with limited cybersecurity experience who need a guided workflow to investigate and remediate compromised endpoints.
 
-- **Hunt** IOCs and suspicious artifacts
-- Map deep **Persistence** mechanisms
-- **Sweep** for recent changes and potential droppers
-- **Remediate** in a controlled, reversible way
-- **Clean up** leftovers and reset broken hygiene
-- **Harden** the endpoint with reversible secure profiles
-- Bundle a **Case** report with evidence and logs
+---
 
-Branding and behavior are defined in [`PLAN.md`](./PLAN.md).
+## What ViperKit Does
+
+ViperKit provides a **guided incident workflow** that walks a tech from:
+
+> "I think this box is compromised"
+> → **Hunt** for the bad tool
+> → **Persist** to see what keeps it alive
+> → **Sweep** to see what landed with it
+> → **Cleanup** to remove it safely
+> → **Harden** to prevent reinfection
+> → **Case Export** to document everything
 
 ---
 
 ## Tech Stack
 
-- **.NET 8** + **Avalonia UI** (cross-platform, but Windows-focused)
+- **.NET 9** + **Avalonia UI** (cross-platform framework, Windows-focused features)
 - Single portable executable
 - Runs elevated for full access to system artifacts
-- Offline-first — no internet required for core features
+- **Offline-first** — no internet required for core features
+- Optional VirusTotal integration for hash lookups
 
 ---
 
 ## Current Status
 
-### Dashboard - Complete
+| Tab | Status | Description |
+|-----|--------|-------------|
+| **Dashboard** | Complete | System snapshot, case management, demo mode (planned) |
+| **Hunt** | Complete | IOC searching with 6 input types |
+| **Persist** | Complete | Deep persistence mapping with risk assessment |
+| **Sweep** | Complete | Recent file radar with temporal clustering |
+| **Cleanup** | Complete | Safe removal with undo capability |
+| **Harden** | Not Started | Security profile application |
+| **Case** | Partial | Event timeline, text export (HTML/ZIP planned) |
+| **Help** | Not Started | In-app documentation |
+
+---
+
+## Features
+
+### Dashboard
 - System snapshot (hostname, user, OS)
 - Case ID and event tracking
 - Case export functionality
-- Quick navigation to tabs
+- **Demo Mode** (planned) — guided walkthrough with test artifacts
 
-### Hunt - Complete
+### Hunt
 - **IOC Types:** File/Path, Hash, Domain/URL, IP, Registry, Name/Keyword
 - **File/Path:** Checks existence, shows metadata, calculates hashes (MD5/SHA1/SHA256)
 - **Hash:** Identifies hash type, optional disk scan for matches
@@ -43,77 +63,99 @@ Branding and behavior are defined in [`PLAN.md`](./PLAN.md).
 - **Name/Keyword:** Searches processes, Program Files, ProgramData, scoped file search
 - Structured results list with severity levels
 - Set case focus for cross-tab filtering
-- Open location, copy target, save results
-- Full case event logging
 
-### Persist - Complete
+### Persist
 - **Registry:** Run/RunOnce (HKCU/HKLM + Wow6432Node)
 - **Winlogon:** Shell/Userinit hijacks
-- **IFEO:** Debugger hijacks
+- **IFEO:** Debugger hijacks (Image File Execution Options)
 - **AppInit_DLLs**
 - **Startup folders** (all users + current user)
 - **Services & Drivers** (auto-start only)
 - **Scheduled Tasks**
 - **PowerShell profiles**
+- **PowerShell History Analysis** (planned) — scan command history for suspicious activity
 - **Risk assessment:** OK / NOTE / CHECK with color badges
 - **High-signal detection:** IFEO, Winlogon, AppInit, PS profiles flagged
 - **MITRE ATT&CK technique mapping**
 - **Publisher extraction** from executables
-- **Summary panel** with triage counts
-- **Filters:** Severity, location type, text search, focus highlighting
-- **Actions:** Investigate, add to case, add to focus, open location
+- Focus highlighting with colored borders
 
-### Sweep - Complete
+### Sweep
 - **Lookback window:** 24 hours, 3 days, 7 days, 30 days
-- **Scan locations:** All user profiles (Desktop, Downloads, AppData, Temp), ProgramData, Startup folders
-- **Services & drivers scan**
-- **File type filtering:** exe, dll, scripts, installers, archives
+- **Scan locations:** All user profiles, ProgramData, Startup folders, Services
+- **File types:** Executables, DLLs, scripts, installers, archives
 - **Severity levels:** HIGH / MEDIUM / LOW based on location + type + age
-- **Summary panel** with triage counts
-- **Severity color badges**
 - **Focus integration:**
   - Focus term matching (pink border)
-  - Temporal clustering with configurable window (orange border) — finds files installed same time as focus target
+  - Temporal clustering ±1-8h configurable (orange border)
   - Folder clustering (blue border)
-  - "Cluster hits only" filter
-  - Focus targets display with timestamps
-- **Actions:** Investigate (SHA256 + VirusTotal), add to case, add to focus, open location
-- Copy/save results, case event logging
+- **Investigate:** SHA256 hash + VirusTotal lookup
 
-### Cleanup - Not Started
+### Cleanup
+- Queue items from Persist and Sweep tabs
+- **Safe removal actions:**
+  - Quarantine files (move to safe location)
+  - Disable services (stop + set to disabled)
+  - Disable scheduled tasks
+  - Backup and delete registry keys
+- **Full undo capability** — restore quarantined files, re-enable services
+- Journal-based tracking for audit trail
+- Preview before apply workflow
 
-### Harden - Not Started
-
-### Case - Partial
-- Events logged throughout workflow
-- Export working
-
-### Help - Not Started
+### Case
+- Chronological event timeline from all tabs
+- Focus targets tracking
+- Text file export
+- HTML report generation (planned)
+- Artifacts ZIP bundle (planned)
 
 ---
 
-## Workflow
+## Core Concept: Case Focus
 
-The intended workflow for a help desk tech responding to an incident:
+**Case Focus** is a global list of targets that follows you across all tabs. When you find something suspicious, add it to focus and it will be highlighted everywhere.
 
 ```
-1. HUNT    → Find the bad thing (IOC, tool name, suspicious file)
-             Set it as "case focus"
+Examples:
+- ConnectWiseControl.Client.exe
+- ScreenConnect Client (service name)
+- C:\Program Files\EasyHelp\agent.exe
+- powershell.exe
+```
 
-2. PERSIST → Check if the bad thing has persistence
-             (services, autoruns, tasks, etc.)
+**How it works:**
+1. **Hunt** — Find suspicious item → "Add to focus"
+2. **Persist** — See highlighted persistence entries matching focus
+3. **Sweep** — See temporal clustering (files created ±1-8h of focus target)
+4. **Cleanup** — Queue focus-related items for removal
 
-3. SWEEP   → Find OTHER things installed at the same time
-             Temporal clustering shows related artifacts
-             Add suspicious items to focus
+---
 
-4. PERSIST → Re-run to check persistence for ALL focus items
+## Workflow Example: Rogue RMM Cleanup
 
-5. CLEANUP → (Coming) Remove the bad stuff safely
+**Scenario:** Attacker installed ScreenConnect that keeps coming back after uninstall.
 
-6. HARDEN  → (Coming) Prevent reinfection
+```
+1. HUNT    → Search "ScreenConnect", find the executable
+             → Set as case focus (captures path + timestamp)
 
-7. CASE    → Export case report with all findings
+2. PERSIST → Run scan, see highlighted:
+             - ScreenConnect service (focus match)
+             - Scheduled task pointing to ScreenConnect
+
+3. SWEEP   → See files clustered around install time:
+             - ScreenConnect.Setup.msi (TIME CLUSTER)
+             - helper.ps1 in AppData (TIME CLUSTER)
+             → Add installer and script to focus
+
+4. PERSIST → Re-run, now see persistence for ALL focus items
+
+5. CLEANUP → Queue all items, preview, execute
+             - Service disabled
+             - Task disabled
+             - Files quarantined
+
+6. CASE    → Export report for ticket documentation
 ```
 
 ---
@@ -122,15 +164,27 @@ The intended workflow for a help desk tech responding to an incident:
 
 ```text
 ViperKit/
-  ViperKit.UI/           # Main Avalonia UI application
-    Views/               # XAML views and code-behind
-    Models/              # Data models (HuntResult, PersistItem, SweepEntry, etc.)
-    docs/                # Blueprint documents
-  assets/
-    Logo.png             # VENOMOUSVIPER branding
-  PLAN.md                # Scope & milestones
-  README.md              # This file
-  BRANDING.md            # Brand guidelines
+├── ViperKit.UI/           # Main Avalonia UI application
+│   ├── Views/             # XAML views and code-behind
+│   │   ├── MainWindow.axaml
+│   │   ├── MainWindow.Hunt.cs
+│   │   ├── MainWindow.Persist.cs
+│   │   ├── MainWindow.Sweep.cs
+│   │   ├── MainWindow.Cleanup.cs
+│   │   └── Sweep.Services.cs
+│   ├── Models/            # Data models
+│   │   ├── CaseManager.cs
+│   │   ├── HuntResult.cs
+│   │   ├── PersistItem.cs
+│   │   ├── SweepEntry.cs
+│   │   ├── CleanupItem.cs
+│   │   └── CleanupJournal.cs
+│   └── docs/              # Blueprint documents
+├── assets/
+│   └── Logo.png           # VENOMOUSVIPER branding
+├── PLAN.md                # Scope & milestones
+├── README.md              # This file
+└── BRANDING.md            # Brand guidelines
 ```
 
 ---
@@ -147,6 +201,27 @@ For a portable release:
 ```bash
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
+
+---
+
+## Planned Features
+
+### Demo Mode (Dashboard)
+- Guided walkthrough for training and proof-of-concept
+- Creates harmless test artifacts (files, registry keys, scheduled task)
+- Step-by-step guide through Hunt → Persist → Sweep → Cleanup
+- Full cleanup at demo end
+
+### PowerShell History Analysis (Persist)
+- Scans PSReadLine history for Windows PowerShell and PowerShell 7
+- All user profiles when running elevated
+- Risk scoring: HIGH (download+execute, encoded commands), MEDIUM (policy changes), LOW (other)
+- Base64 decoding for encoded commands
+
+### Enhanced Case Export
+- HTML report with timeline visualization
+- Markdown export for documentation
+- Artifacts ZIP bundle with quarantined files
 
 ---
 

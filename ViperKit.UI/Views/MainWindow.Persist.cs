@@ -68,7 +68,7 @@ public partial class MainWindow
             // NEW: count high-signal hotspots for triage view
             int hotspotCount = _persistItems.Count(IsHighSignalPersistItem);
 
-            // Bind into UI ListBox (respecting filters)
+            // Bind into UI ListBox.
             BindPersistResults();
 
             // Update summary panel counts
@@ -81,7 +81,7 @@ public partial class MainWindow
                     $"{flaggedCount} marked 'CHECK'; {hotspotCount} high-signal hotspot(s).";
             }
 
-            // JSON log of this snapshot (lightweight, for later case review)
+            // JSON log of this snapshot.
             try
             {
                JsonLog.Append("persist", new
@@ -1324,7 +1324,6 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             }
             else
             {
-                // Even when in a normal system location, AppInit_DLLs are worth a look.
                 risk = "CHECK – AppInit DLL configured";
                 reasonBuilder.Append($"DLL in common system location: {fullPath}. ");
             }
@@ -1689,7 +1688,6 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         if (loc.Contains("AppInit_DLLs", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        // PowerShell profiles can be a stealthy execution hook
         if (loc.Contains("PowerShell profile", StringComparison.OrdinalIgnoreCase))
             return true;
 
@@ -1791,7 +1789,6 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
 
         string trimmed = input.Trim();
 
-        // Quotes around full path
         if (trimmed.StartsWith("\""))
         {
             int secondQuote = trimmed.IndexOf('\"', 1);
@@ -1812,7 +1809,6 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
         if (string.IsNullOrWhiteSpace(path))
             return true;
 
-        // Normalise slashes + lowercase for comparisons
         string lower = path.Replace('/', '\\').ToLowerInvariant();
 
         // 1) Very high-risk: stuff directly under user profile temp / downloads / desktop / public

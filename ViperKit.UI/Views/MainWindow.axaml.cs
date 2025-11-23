@@ -34,7 +34,7 @@ public partial class MainWindow : Window
             string domain      = Environment.UserDomainName;
             var    arch        = RuntimeInformation.OSArchitecture;
 
-            // Use a helper that turns "10.0.26100" into "Windows 11 (build 26100)".
+            // UHelper for Windows build.
             string osLabel     = GetFriendlyOsLabel();
 
             if (SystemHostNameText != null)

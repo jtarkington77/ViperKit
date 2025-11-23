@@ -190,7 +190,7 @@
                                         Width="110"
                                         Click="HuntRunButton_OnClick" />
 
-                                <!-- NEW: push this IOC into case focus -->
+                                <!-- push this IOC into case focus -->
                                 <Button x:Name="HuntSetCaseFocusButton"
                                         Content="Set as case focus"
                                         Width="150"
@@ -440,7 +440,7 @@
                               Checked="PersistFilterCheckBox_OnChanged"
                               Unchecked="PersistFilterCheckBox_OnChanged" />
 
-                    <!-- NEW: risk / triage mode -->
+                    <!-- risk / triage mode -->
                     <ComboBox x:Name="PersistRiskFilterCombo"
                               Width="170"
                               SelectedIndex="0"
@@ -616,7 +616,7 @@
                                 MinWidth="170"
                                 Click="PersistAddToCaseButton_OnClick" />
 
-                        <!-- NEW: set case focus from Persist -->
+                        <!--set case focus from Persist -->
                         <Button x:Name="PersistSetFocusButton"
                                 Content="Set as case focus"
                                 MinWidth="150"

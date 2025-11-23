@@ -12,7 +12,7 @@ public static class CaseManager
     private static readonly object _lock = new();
     private static readonly List<CaseEvent> _events = new();
 
-    // Multi-target focus list for this case (ConnectWise, Steam, paths, etc.)
+    // Multi-target focus list for this case 
     private static readonly List<string> _focusTargets = new();
 
     // Cleanup queue for items pending remediation
@@ -109,7 +109,7 @@ public static class CaseManager
 
     /// <summary>
     /// Backwards-compatible "set focus" – but we now APPEND to a list
-    /// instead of overwriting, so you can build up ConnectWise + Steam + etc.
+    /// instead of overwriting it. This allows us to track multiple targets
     /// </summary>
     public static void SetFocusTarget(string? value, string sourceTab = "System")
     {

@@ -186,7 +186,7 @@ public partial class MainWindow
             return "DomainOrUrl";
         }
 
-        // Everything else → treat as name / keyword (ScreenConnect, AnyDesk, etc.)
+        // Everything else → treat as name.
         return "NameKeyword";
     }
 
