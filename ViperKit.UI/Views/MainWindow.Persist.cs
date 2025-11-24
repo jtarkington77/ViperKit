@@ -269,6 +269,20 @@ public partial class MainWindow
             item.IsFocusHit = hasFocusTerms && MatchesCaseFocus(item, focusTerms);
         }
 
+        // Compare against baseline if one exists - mark new items
+        if (CaseManager.HasBaseline)
+        {
+            CaseManager.CompareToBaseline(_persistItems);
+        }
+        else
+        {
+            // No baseline - clear any previous markers
+            foreach (var item in _persistItems)
+            {
+                item.IsNewSinceBaseline = false;
+            }
+        }
+
         bool filterByFocus = _persistFilterByFocus && hasFocusTerms;
 
         if (filterByFocus)

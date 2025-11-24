@@ -66,6 +66,148 @@
                                 Foreground="#8FA9AA"
                                 TextWrapping="Wrap" />
 
+                      <!-- DISCLAIMER -->
+                      <Border Background="#1A1A0A"
+                              Padding="12"
+                              CornerRadius="6"
+                              BorderBrush="#4A4A16"
+                              BorderThickness="1">
+                        <StackPanel Spacing="6">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="IMPORTANT NOTICE"
+                                      FontSize="12"
+                                      FontWeight="Bold"
+                                      Foreground="#FFCC66" />
+                          </StackPanel>
+                          <TextBlock FontSize="11"
+                                    Foreground="#C0C0A0"
+                                    TextWrapping="Wrap">
+                            ViperKit is a forensic investigation and incident response tool designed to help identify and remediate threats on compromised systems. It is NOT an Endpoint Detection and Response (EDR) solution, antivirus, or real-time protection software. After using ViperKit to clean a system, continued monitoring with proper security tools is strongly recommended. Use at your own risk. Always verify findings and maintain backups before taking remediation actions.
+                          </TextBlock>
+                        </StackPanel>
+                      </Border>
+
+                      <!-- CASE SELECTION PANEL (shown before case is started) -->
+                      <Border x:Name="CaseSelectionPanel"
+                              Background="#050E10"
+                              Padding="16"
+                              CornerRadius="6"
+                              BorderBrush="#1A4A3F"
+                              BorderThickness="1"
+                              IsVisible="True">
+                        <StackPanel Spacing="12">
+                          <TextBlock Text="Case Management"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Foreground="#00FFF8" />
+
+                          <TextBlock Text="Start a new case or load an existing one to continue your investigation."
+                                    FontSize="12"
+                                    Foreground="#8FA9AA"
+                                    TextWrapping="Wrap" />
+
+                          <!-- New Case Section -->
+                          <Border Background="#0A1518" Padding="12" CornerRadius="4">
+                            <StackPanel Spacing="8">
+                              <TextBlock Text="Start New Case"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Foreground="#99CC99" />
+                              <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="NewCaseNameInput"
+                                        Width="300"
+                                        Watermark="Case name (optional, e.g., Ticket-12345)" />
+                                <Button x:Name="StartNewCaseButton"
+                                        Content="Start New Case"
+                                        Click="StartNewCaseButton_OnClick"
+                                        MinWidth="140"
+                                        Background="#1E3D2A"
+                                        Foreground="#99CC99" />
+                              </StackPanel>
+                              <TextBlock Text="Leave blank to auto-generate case ID from hostname + timestamp"
+                                        FontSize="10"
+                                        Foreground="#667"
+                                        FontStyle="Italic" />
+                            </StackPanel>
+                          </Border>
+
+                          <!-- Load Existing Case Section -->
+                          <Border Background="#0A1518" Padding="12" CornerRadius="4">
+                            <StackPanel Spacing="8">
+                              <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Load Existing Case"
+                                          FontSize="13"
+                                          FontWeight="SemiBold"
+                                          Foreground="#66CCFF" />
+                                <Button x:Name="RefreshCaseListButton"
+                                        Content="Refresh"
+                                        Click="RefreshCaseListButton_OnClick"
+                                        Padding="8,2"
+                                        FontSize="10" />
+                              </StackPanel>
+
+                              <ListBox x:Name="AvailableCasesList"
+                                      Height="150"
+                                      Background="#050A0C"
+                                      SelectionChanged="AvailableCasesList_OnSelectionChanged">
+                                <ListBox.ItemTemplate>
+                                  <DataTemplate x:DataType="models:CaseSummary">
+                                    <Border Padding="8" Margin="0,2" CornerRadius="4" Background="#0D1517">
+                                      <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2">
+                                          <TextBlock Text="{Binding DisplayName}"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="#E7F2F2" />
+                                          <TextBlock Text="{Binding DisplayInfo}"
+                                                    FontSize="11"
+                                                    Foreground="#8FA9AA" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                          <TextBlock Text="Baseline"
+                                                    FontSize="10"
+                                                    Foreground="#66CCFF"
+                                                    IsVisible="{Binding HasBaseline}" />
+                                          <Border Padding="6,2" CornerRadius="3"
+                                                  Background="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <TextBlock Text="{Binding Status}"
+                                                      FontSize="10"
+                                                      Foreground="#888" />
+                                          </Border>
+                                        </StackPanel>
+                                      </Grid>
+                                    </Border>
+                                  </DataTemplate>
+                                </ListBox.ItemTemplate>
+                              </ListBox>
+
+                              <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="LoadSelectedCaseButton"
+                                        Content="Load Selected Case"
+                                        Click="LoadSelectedCaseButton_OnClick"
+                                        MinWidth="150"
+                                        IsEnabled="False"
+                                        Background="#1A3A4A"
+                                        Foreground="#66CCFF" />
+                                <Button x:Name="DeleteSelectedCaseButton"
+                                        Content="Delete Case"
+                                        Click="DeleteSelectedCaseButton_OnClick"
+                                        MinWidth="100"
+                                        IsEnabled="False"
+                                        Background="#3A1E2C"
+                                        Foreground="#FF9999" />
+                              </StackPanel>
+
+                              <TextBlock x:Name="NoCasesText"
+                                        Text="No existing cases found on this machine."
+                                        FontSize="11"
+                                        Foreground="#666"
+                                        FontStyle="Italic"
+                                        IsVisible="False" />
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </Border>
+
                       <!-- TWO-COLUMN LAYOUT: SYSTEM SNAPSHOT + CASE SUMMARY -->
                       <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
 
@@ -132,11 +274,96 @@
                                       Content="Export Case Report"
                                       Width="160"
                                       Click="CaseExportButton_OnClick" />
+                              <Button x:Name="CloseCaseButton"
+                                      Content="Close Case"
+                                      Width="100"
+                                      Click="CloseCaseButton_OnClick" />
                             </StackPanel>
                           </StackPanel>
                         </Border>
 
                       </Grid>
+
+                      <!-- BASELINE PANEL -->
+                      <Border Background="#050E10"
+                              Padding="12"
+                              CornerRadius="6"
+                              BorderBrush="#1A3C3F"
+                              BorderThickness="1">
+                        <StackPanel Spacing="10">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Baseline"
+                                      FontSize="14"
+                                      FontWeight="SemiBold"
+                                      Foreground="#66CCFF" />
+                            <TextBlock Text="System state snapshot for post-incident monitoring"
+                                      FontSize="12"
+                                      Foreground="#8FA9AA"
+                                      VerticalAlignment="Center" />
+                          </StackPanel>
+
+                          <!-- Baseline Status -->
+                          <Border x:Name="BaselineStatusBorder"
+                                  Background="#0A1518"
+                                  Padding="10"
+                                  CornerRadius="4">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock x:Name="BaselineStatusText"
+                                          Text="No baseline captured"
+                                          FontSize="12"
+                                          Foreground="#AAAAAA" />
+                                <TextBlock x:Name="BaselineDetailsText"
+                                          Text="Capture a baseline after cleaning to monitor for reinfection."
+                                          FontSize="11"
+                                          Foreground="#667"
+                                          TextWrapping="Wrap" />
+                              </StackPanel>
+                              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="CaptureBaselineButton"
+                                        Content="Capture Baseline"
+                                        Click="CaptureBaselineButton_OnClick"
+                                        MinWidth="130"
+                                        Background="#1A4A3A"
+                                        Foreground="#88FFAA" />
+                                <Button x:Name="CompareBaselineButton"
+                                        Content="Compare to Baseline"
+                                        Click="CompareBaselineButton_OnClick"
+                                        MinWidth="150"
+                                        IsEnabled="False" />
+                              </StackPanel>
+                            </Grid>
+                          </Border>
+
+                          <!-- Baseline Capture Info (shown after capture) -->
+                          <Border x:Name="BaselineInfoPanel"
+                                  Background="#0A1A20"
+                                  Padding="10"
+                                  CornerRadius="4"
+                                  IsVisible="False">
+                            <StackPanel Spacing="4">
+                              <StackPanel Orientation="Horizontal" Spacing="16">
+                                <TextBlock x:Name="BaselineCapturedAtText"
+                                          Text="Captured: (date)"
+                                          FontSize="11"
+                                          Foreground="#99CC99" />
+                                <TextBlock x:Name="BaselinePersistCountText"
+                                          Text="Persist entries: 0"
+                                          FontSize="11"
+                                          Foreground="#C7D4D4" />
+                                <TextBlock x:Name="BaselineHardenCountText"
+                                          Text="Hardening applied: 0"
+                                          FontSize="11"
+                                          Foreground="#C7D4D4" />
+                              </StackPanel>
+                              <TextBlock Text="Use 'Compare to Baseline' to scan for new persistence entries added since baseline."
+                                        FontSize="10"
+                                        Foreground="#667"
+                                        FontStyle="Italic" />
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </Border>
 
                       <!-- DEMO MODE PANEL -->
                       <Border Background="#0A1518"
@@ -680,7 +907,7 @@
                                   BorderThickness="{Binding FocusBorderThickness}"
                                   BorderBrush="{Binding FocusBorderBrush}">
                             <StackPanel Spacing="2">
-                              <!-- Top line: Risk badge + location/source -->
+                              <!-- Top line: Risk badge + NEW badge + location/source -->
                               <StackPanel Orientation="Horizontal"
                                           Spacing="8">
                                 <Border Padding="6,2"
@@ -689,6 +916,17 @@
                                   <TextBlock Text="{Binding Risk}"
                                             FontSize="11"
                                             FontWeight="SemiBold" />
+                                </Border>
+
+                                <!-- NEW since baseline badge -->
+                                <Border Padding="6,2"
+                                        CornerRadius="3"
+                                        Background="#5A2A1E"
+                                        IsVisible="{Binding ShowBaselineBadge}">
+                                  <TextBlock Text="NEW"
+                                            FontSize="10"
+                                            FontWeight="Bold"
+                                            Foreground="#FF9966" />
                                 </Border>
 
                                 <TextBlock FontSize="11">
@@ -1626,12 +1864,177 @@
 
         <!-- HARDEN -->
         <TabItem Header="Harden">
-          <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Harden tab shell — Standard / Strict profiles with rollback."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
-          </Border>
+          <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+
+            <!-- Title + Description -->
+            <StackPanel Grid.Row="0" Spacing="4">
+              <TextBlock Text="Harden"
+                        FontSize="20"
+                        FontWeight="SemiBold"
+                        Foreground="#EAF7F7" />
+              <TextBlock Text="Apply security controls to prevent reinfection. All changes can be rolled back."
+                        FontSize="13"
+                        Foreground="#8FA9AA"
+                        TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- Profile Selection + Stats -->
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+              <!-- Profile Buttons -->
+              <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Profile:" VerticalAlignment="Center" Foreground="#8FA9AA" />
+                <RadioButton x:Name="HardenProfileStandard"
+                            Content="Standard"
+                            GroupName="HardenProfile"
+                            IsChecked="True"
+                            Foreground="#C7D4D4" />
+                <RadioButton x:Name="HardenProfileStrict"
+                            Content="Strict"
+                            GroupName="HardenProfile"
+                            Foreground="#C7D4D4" />
+                <RadioButton x:Name="HardenProfileCustom"
+                            Content="Custom"
+                            GroupName="HardenProfile"
+                            Foreground="#C7D4D4" />
+                <Button x:Name="HardenLoadProfileButton"
+                        Content="Load Profile"
+                        Click="HardenLoadProfileButton_OnClick"
+                        MinWidth="100" />
+              </StackPanel>
+
+              <!-- Stats Panel -->
+              <Border Grid.Column="2"
+                      Background="#050E10"
+                      Padding="12,6"
+                      CornerRadius="4">
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                  <TextBlock x:Name="HardenStatsApplied"
+                            Text="Applied: 0"
+                            FontSize="12"
+                            Foreground="#99CC99" />
+                  <TextBlock x:Name="HardenStatsPending"
+                            Text="Selected: 0"
+                            FontSize="12"
+                            Foreground="#FFCC66" />
+                  <TextBlock x:Name="HardenStatsSkipped"
+                            Text="Already Set: 0"
+                            FontSize="12"
+                            Foreground="#66CCFF" />
+                </StackPanel>
+              </Border>
+            </Grid>
+
+            <!-- Scan Button + Status -->
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*">
+              <Button x:Name="HardenScanButton"
+                      Grid.Column="0"
+                      Content="Scan Current State"
+                      Click="HardenScanButton_OnClick"
+                      MinWidth="150" />
+              <TextBlock x:Name="HardenStatusText"
+                        Grid.Column="1"
+                        Text="Status: Click 'Scan Current State' to detect system configuration."
+                        VerticalAlignment="Center"
+                        Margin="12,0,0,0"
+                        Foreground="#8FA9AA" />
+            </Grid>
+
+            <!-- Actions List -->
+            <ScrollViewer Grid.Row="3">
+              <ItemsControl x:Name="HardenActionsList" Background="#050A0C">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="models:HardenAction">
+                    <Border Padding="10"
+                            Margin="0,0,0,4"
+                            CornerRadius="4"
+                            Background="#0D1517"
+                            BorderThickness="2"
+                            BorderBrush="#333">
+                      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                        <!-- Checkbox -->
+                        <CheckBox Grid.Column="0"
+                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,10,0"
+                                  IsEnabled="{Binding !IsAlreadyHardened}" />
+
+                        <!-- Status Icon + Category -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding StatusIcon}"
+                                    FontSize="14"
+                                    Foreground="{Binding StatusColor}"
+                                    VerticalAlignment="Center" />
+                          <Border Padding="6,2"
+                                  CornerRadius="3"
+                                  Background="{Binding CategoryBackground}">
+                            <TextBlock Text="{Binding Category}"
+                                      FontSize="10"
+                                      Foreground="{Binding CategoryForeground}"
+                                      FontWeight="SemiBold" />
+                          </Border>
+                        </StackPanel>
+
+                        <!-- Name + State -->
+                        <StackPanel Grid.Column="2" Margin="12,0" VerticalAlignment="Center">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Name}"
+                                      FontWeight="SemiBold"
+                                      FontSize="13"
+                                      Foreground="#E7F2F2" />
+                            <TextBlock Text="⚠"
+                                      FontSize="12"
+                                      Foreground="#FFCC66"
+                                      IsVisible="{Binding HasWarning}"
+                                      ToolTip.Tip="{Binding WarningMessage}" />
+                          </StackPanel>
+                          <TextBlock Text="{Binding StateDisplay}"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+                        </StackPanel>
+
+                        <!-- Profile indicator -->
+                        <TextBlock Grid.Column="3"
+                                  Text="{Binding Profile}"
+                                  FontSize="10"
+                                  Foreground="#666"
+                                  VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="4"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        HorizontalAlignment="Left">
+              <Button x:Name="HardenApplySelectedButton"
+                      Content="Apply Selected"
+                      MinWidth="120"
+                      Click="HardenApplySelectedButton_OnClick"
+                      Background="#1E3D2A"
+                      Foreground="#99CC99" />
+              <Button x:Name="HardenRollbackLastButton"
+                      Content="Rollback Last"
+                      MinWidth="110"
+                      Click="HardenRollbackLastButton_OnClick" />
+              <Button x:Name="HardenRollbackAllButton"
+                      Content="Rollback All"
+                      MinWidth="100"
+                      Click="HardenRollbackAllButton_OnClick" />
+              <Button x:Name="HardenSelectAllButton"
+                      Content="Select All"
+                      MinWidth="90"
+                      Click="HardenSelectAllButton_OnClick" />
+              <Button x:Name="HardenDeselectAllButton"
+                      Content="Deselect All"
+                      MinWidth="90"
+                      Click="HardenDeselectAllButton_OnClick" />
+            </StackPanel>
+
+          </Grid>
         </TabItem>
 
                 <!-- CASE -->

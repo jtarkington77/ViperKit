@@ -10,19 +10,265 @@ namespace ViperKit.UI.Views;
 
 public partial class MainWindow : Window
 {
+    private bool _caseActive = false;
+
     public MainWindow()
     {
         InitializeComponent();
-        CaseManager.StartNewCase();
-        PopulateDashboardSystemSnapshot();
-        UpdateDashboardCaseSummary();
-        RefreshCaseTab();
-
         DataContext = new MainWindowViewModel();
+
+        // Show case selection panel, don't auto-start case
+        ShowCaseSelectionPanel();
+        RefreshAvailableCases();
         PopulateSystemSnapshot();
 
         // Initialize Demo Mode
         InitializeDemoMode();
+    }
+
+    // =========================
+    // CASE SELECTION / MANAGEMENT
+    // =========================
+    private void ShowCaseSelectionPanel()
+    {
+        _caseActive = false;
+        if (CaseSelectionPanel != null) CaseSelectionPanel.IsVisible = true;
+        // Hide case-dependent panels until case is started
+    }
+
+    private void HideCaseSelectionPanel()
+    {
+        _caseActive = true;
+        if (CaseSelectionPanel != null) CaseSelectionPanel.IsVisible = false;
+    }
+
+    private void RefreshAvailableCases()
+    {
+        try
+        {
+            var cases = CaseStorage.GetAvailableCases();
+            if (AvailableCasesList != null)
+            {
+                AvailableCasesList.ItemsSource = cases;
+            }
+
+            if (NoCasesText != null)
+            {
+                NoCasesText.IsVisible = cases.Count == 0;
+            }
+        }
+        catch
+        {
+            // Don't crash if we can't list cases
+        }
+    }
+
+    private void RefreshCaseListButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        RefreshAvailableCases();
+    }
+
+    private void AvailableCasesList_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        bool hasSelection = AvailableCasesList?.SelectedItem != null;
+        if (LoadSelectedCaseButton != null) LoadSelectedCaseButton.IsEnabled = hasSelection;
+        if (DeleteSelectedCaseButton != null) DeleteSelectedCaseButton.IsEnabled = hasSelection;
+    }
+
+    private void StartNewCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string? caseName = NewCaseNameInput?.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(caseName))
+                caseName = null;
+
+            CaseManager.StartNewCase(caseName);
+            HideCaseSelectionPanel();
+            OnCaseStarted();
+
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: New case started - {CaseManager.GetDisplayName()}";
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error starting case - {ex.Message}";
+        }
+    }
+
+    private void LoadSelectedCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (AvailableCasesList?.SelectedItem is CaseSummary summary)
+            {
+                if (CaseManager.LoadCase(summary.CaseId))
+                {
+                    HideCaseSelectionPanel();
+                    OnCaseStarted();
+                    UpdateBaselineUI();
+
+                    if (DashboardStatusText != null)
+                        DashboardStatusText.Text = $"Status: Case loaded - {CaseManager.GetDisplayName()}";
+                }
+                else
+                {
+                    if (DashboardStatusText != null)
+                        DashboardStatusText.Text = "Status: Failed to load case";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error loading case - {ex.Message}";
+        }
+    }
+
+    private void DeleteSelectedCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (AvailableCasesList?.SelectedItem is CaseSummary summary)
+            {
+                CaseStorage.DeleteCase(summary.CaseId);
+                RefreshAvailableCases();
+
+                if (DashboardStatusText != null)
+                    DashboardStatusText.Text = $"Status: Case deleted - {summary.DisplayName}";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error deleting case - {ex.Message}";
+        }
+    }
+
+    private void CloseCaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            CaseManager.SaveCurrentCase();
+            ShowCaseSelectionPanel();
+            RefreshAvailableCases();
+
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = "Status: Case closed and saved";
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error closing case - {ex.Message}";
+        }
+    }
+
+    private void OnCaseStarted()
+    {
+        PopulateDashboardSystemSnapshot();
+        UpdateDashboardCaseSummary();
+        RefreshCaseTab();
+        UpdateBaselineUI();
+    }
+
+    // =========================
+    // BASELINE MANAGEMENT
+    // =========================
+    private void UpdateBaselineUI()
+    {
+        try
+        {
+            var baseline = CaseManager.GetBaseline();
+            bool hasBaseline = baseline != null;
+
+            if (BaselineStatusText != null)
+            {
+                BaselineStatusText.Text = hasBaseline
+                    ? "Baseline captured"
+                    : "No baseline captured";
+                BaselineStatusText.Foreground = hasBaseline
+                    ? Avalonia.Media.Brushes.LightGreen
+                    : Avalonia.Media.Brushes.Gray;
+            }
+
+            if (BaselineDetailsText != null)
+            {
+                BaselineDetailsText.Text = hasBaseline
+                    ? "Baseline is available for comparison."
+                    : "Capture a baseline after cleaning to monitor for reinfection.";
+            }
+
+            if (CompareBaselineButton != null)
+                CompareBaselineButton.IsEnabled = hasBaseline;
+
+            if (BaselineInfoPanel != null)
+            {
+                BaselineInfoPanel.IsVisible = hasBaseline;
+                if (hasBaseline && baseline != null)
+                {
+                    if (BaselineCapturedAtText != null)
+                        BaselineCapturedAtText.Text = $"Captured: {baseline.CapturedAt:yyyy-MM-dd HH:mm:ss}";
+
+                    if (BaselinePersistCountText != null)
+                        BaselinePersistCountText.Text = $"Persist entries: {baseline.PersistEntries?.Count ?? 0}";
+
+                    if (BaselineHardenCountText != null)
+                        BaselineHardenCountText.Text = $"Hardening applied: {baseline.HardeningApplied?.Count ?? 0}";
+                }
+            }
+        }
+        catch
+        {
+            // Never crash updating baseline UI
+        }
+    }
+
+    private void CaptureBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Get current persist results
+            var persistItems = GetCurrentPersistItems();
+
+            CaseManager.CaptureBaseline(persistItems);
+            UpdateBaselineUI();
+
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Baseline captured with {persistItems.Count} persistence entries";
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error capturing baseline - {ex.Message}";
+        }
+    }
+
+    private void CompareBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Switch to Persist tab
+            if (MainTabs != null)
+                MainTabs.SelectedIndex = 2; // Persist tab
+
+            // Trigger persist scan by simulating button click
+            PersistRunButton_OnClick(sender, e);
+
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = "Status: Running persist scan to compare against baseline...";
+        }
+        catch (Exception ex)
+        {
+            if (DashboardStatusText != null)
+                DashboardStatusText.Text = $"Status: Error comparing baseline - {ex.Message}";
+        }
+    }
+
+    // Helper to get current persist items (from the last scan)
+    private System.Collections.Generic.List<PersistItem> GetCurrentPersistItems()
+    {
+        return _persistItems ?? new System.Collections.Generic.List<PersistItem>();
     }
 
     // =========================

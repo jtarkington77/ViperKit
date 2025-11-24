@@ -12,13 +12,17 @@ public static class CaseManager
     private static readonly object _lock = new();
     private static readonly List<CaseEvent> _events = new();
 
-    // Multi-target focus list for this case 
+    // Multi-target focus list for this case
     private static readonly List<string> _focusTargets = new();
 
     // Cleanup queue for items pending remediation
     private static readonly List<CleanupItem> _cleanupQueue = new();
 
+    // Baseline data for this case
+    private static BaselineData? _baseline;
+
     public static string CaseId       { get; private set; } = string.Empty;
+    public static string CaseName     { get; private set; } = string.Empty;
     public static DateTime StartedAt  { get; private set; }
     public static DateTime? EndedAt   { get; private set; }
 
@@ -26,13 +30,20 @@ public static class CaseManager
     public static string UserName     { get; private set; } = string.Empty;
     public static string OsDescription{ get; private set; } = string.Empty;
 
-    public static void StartNewCase()
+    public static bool HasBaseline => _baseline != null;
+    public static DateTime? BaselineCapturedAt => _baseline?.CapturedAt;
+
+    /// <summary>
+    /// Start a new case with optional custom name.
+    /// </summary>
+    public static void StartNewCase(string? customName = null)
     {
         lock (_lock)
         {
             _events.Clear();
             _focusTargets.Clear();
             _cleanupQueue.Clear();
+            _baseline = null;
             EndedAt = null;
 
             HostName      = Environment.MachineName;
@@ -40,10 +51,14 @@ public static class CaseManager
             OsDescription = GetOsDescription();
 
             CaseId    = $"{HostName}-{DateTime.Now:yyyyMMdd-HHmmss}";
+            CaseName  = customName ?? string.Empty;
             StartedAt = DateTime.Now;
 
             // Initialize the cleanup journal for this case
             CleanupJournal.Initialize(CaseId);
+
+            // Initialize the harden journal for this case
+            HardenJournal.Initialize(CaseId);
 
             _events.Add(new CaseEvent
             {
@@ -52,9 +67,212 @@ public static class CaseManager
                 Action    = "Case started",
                 Severity  = "INFO",
                 Target    = HostName,
-                Details   = $"User: {UserName}; OS: {OsDescription}"
+                Details   = string.IsNullOrEmpty(CaseName)
+                    ? $"User: {UserName}; OS: {OsDescription}"
+                    : $"Name: {CaseName}; User: {UserName}; OS: {OsDescription}"
+            });
+
+            // Auto-save to disk
+            SaveCurrentCase();
+        }
+    }
+
+    /// <summary>
+    /// Load an existing case from disk.
+    /// </summary>
+    public static bool LoadCase(string caseId)
+    {
+        var caseData = CaseStorage.LoadCase(caseId);
+        if (caseData == null)
+            return false;
+
+        lock (_lock)
+        {
+            _events.Clear();
+            _focusTargets.Clear();
+            _cleanupQueue.Clear();
+
+            CaseId        = caseData.CaseId;
+            CaseName      = caseData.CaseName;
+            HostName      = caseData.HostName;
+            UserName      = caseData.UserName;
+            OsDescription = caseData.OsDescription;
+            StartedAt     = caseData.CreatedAt;
+            EndedAt       = caseData.ClosedAt;
+            _baseline     = caseData.Baseline;
+
+            if (caseData.FocusTargets != null)
+                _focusTargets.AddRange(caseData.FocusTargets);
+
+            if (caseData.Events != null)
+                _events.AddRange(caseData.Events);
+
+            if (caseData.CleanupQueue != null)
+                _cleanupQueue.AddRange(caseData.CleanupQueue);
+
+            // Initialize journals for this case
+            CleanupJournal.Initialize(CaseId);
+            HardenJournal.Initialize(CaseId);
+
+            _events.Add(new CaseEvent
+            {
+                Timestamp = DateTime.Now,
+                Tab       = "Case",
+                Action    = "Case loaded",
+                Severity  = "INFO",
+                Target    = CaseId,
+                Details   = $"Loaded from disk with {_events.Count - 1} previous events"
             });
         }
+        return true;
+    }
+
+    /// <summary>
+    /// Save the current case to disk.
+    /// </summary>
+    public static void SaveCurrentCase()
+    {
+        // Don't save if no case is active
+        if (string.IsNullOrEmpty(CaseId))
+            return;
+
+        lock (_lock)
+        {
+            var caseData = new CaseData
+            {
+                CaseId        = CaseId,
+                CaseName      = CaseName,
+                HostName      = HostName,
+                UserName      = UserName,
+                OsDescription = OsDescription,
+                CreatedAt     = StartedAt,
+                ClosedAt      = EndedAt,
+                Status        = EndedAt.HasValue ? "Closed" : "Active",
+                FocusTargets  = _focusTargets.ToList(),
+                Events        = _events.ToList(),
+                CleanupQueue  = _cleanupQueue.ToList(),
+                Baseline      = _baseline,
+                BaselineCapturedAt = _baseline?.CapturedAt
+            };
+
+            CaseStorage.SaveCase(caseData);
+        }
+    }
+
+    /// <summary>
+    /// Capture baseline from current Persist scan results.
+    /// </summary>
+    public static void CaptureBaseline(List<PersistItem> persistItems)
+    {
+        lock (_lock)
+        {
+            _baseline = new BaselineData
+            {
+                CapturedAt = DateTime.Now,
+                HostName = HostName,
+                CapturedBy = UserName,
+                PersistEntries = new List<BaselinePersistEntry>(),
+                HardeningApplied = new List<BaselineHardenEntry>(),
+                ConfigEntries = new List<BaselineConfigEntry>()
+            };
+
+            // Convert persist items to baseline entries
+            foreach (var item in persistItems)
+            {
+                _baseline.PersistEntries.Add(new BaselinePersistEntry
+                {
+                    Name = item.Name,
+                    Path = item.Path,
+                    RegistryPath = item.RegistryPath,
+                    LocationType = item.LocationType,
+                    Source = item.Source,
+                    Risk = item.Risk,
+                    Hash = item.FileHash ?? string.Empty,
+                    FileModified = item.FileModified
+                });
+            }
+
+            // Get hardening actions from journal
+            var hardenEntries = HardenJournal.GetEntries();
+            foreach (var entry in hardenEntries)
+            {
+                if (!entry.IsRolledBack)
+                {
+                    _baseline.HardeningApplied.Add(new BaselineHardenEntry
+                    {
+                        ActionId = entry.ActionId,
+                        ActionName = entry.ActionName,
+                        Category = entry.Category,
+                        PreviousState = entry.PreviousState,
+                        NewState = entry.NewState,
+                        AppliedAt = entry.Timestamp
+                    });
+                }
+            }
+
+            _events.Add(new CaseEvent
+            {
+                Timestamp = DateTime.Now,
+                Tab = "Baseline",
+                Action = "Baseline captured",
+                Severity = "INFO",
+                Target = CaseId,
+                Details = $"Captured {_baseline.PersistEntries.Count} persistence entries, {_baseline.HardeningApplied.Count} hardening actions"
+            });
+
+            SaveCurrentCase();
+        }
+    }
+
+    /// <summary>
+    /// Get the current baseline data.
+    /// </summary>
+    public static BaselineData? GetBaseline()
+    {
+        lock (_lock)
+        {
+            return _baseline;
+        }
+    }
+
+    /// <summary>
+    /// Compare current persist items against baseline.
+    /// Returns items that are new (not in baseline).
+    /// </summary>
+    public static List<PersistItem> CompareToBaseline(List<PersistItem> currentItems)
+    {
+        var newItems = new List<PersistItem>();
+
+        lock (_lock)
+        {
+            if (_baseline == null)
+                return currentItems; // No baseline = all items are "new"
+
+            foreach (var item in currentItems)
+            {
+                // Check if this item exists in baseline
+                bool existsInBaseline = _baseline.PersistEntries.Exists(b =>
+                    b.Path == item.Path &&
+                    b.RegistryPath == item.RegistryPath &&
+                    b.Name == item.Name);
+
+                if (!existsInBaseline)
+                {
+                    item.IsNewSinceBaseline = true;
+                    newItems.Add(item);
+                }
+            }
+        }
+
+        return newItems;
+    }
+
+    /// <summary>
+    /// Get display name for the case.
+    /// </summary>
+    public static string GetDisplayName()
+    {
+        return string.IsNullOrEmpty(CaseName) ? CaseId : $"{CaseName} ({CaseId})";
     }
 
     private static string GetOsDescription()
@@ -93,6 +311,9 @@ public static class CaseManager
                 Details   = details ?? string.Empty
             });
         }
+
+        // Auto-save after each event (outside lock to avoid deadlock)
+        SaveCurrentCase();
     }
 
     public static IReadOnlyList<CaseEvent> GetSnapshot()

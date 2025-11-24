@@ -14,11 +14,20 @@ namespace ViperKit.UI.Models
         public string Reason { get; set; } = string.Empty;
         public string MitreTechnique { get; set; } = string.Empty;
         public string Publisher { get; set; } = string.Empty;
+        public string? FileHash { get; set; }
+        public DateTime? FileModified { get; set; }
 
         // ---- UI helper properties for filtering and highlighting ----
 
+        // True when this entry is new since baseline was captured
+        public bool IsNewSinceBaseline { get; set; }
+
         // True when this entry matches the current case focus terms
         public bool IsFocusHit { get; set; }
+
+        // UI property for showing "NEW" badge when item is new since baseline
+        public string BaselineBadge => IsNewSinceBaseline ? "NEW" : string.Empty;
+        public bool ShowBaselineBadge => IsNewSinceBaseline;
 
         // Color for the outer card border (string so Avalonia can parse it)
         public string FocusBorderBrush => IsFocusHit ? "#FF6BD5" : "#333";
