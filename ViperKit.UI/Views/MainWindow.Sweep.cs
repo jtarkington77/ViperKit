@@ -44,7 +44,8 @@ public partial class MainWindow
                 ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
                 ".scr", ".sys",
                 ".msi",
-                ".zip", ".7z", ".rar", ".iso"
+                ".zip", ".7z", ".rar", ".iso",
+                ".dat", ".cfg", ".config", ".ini" // Config files often used by malware
             };
 
             // Build sweep roots across ALL user profiles + common paths

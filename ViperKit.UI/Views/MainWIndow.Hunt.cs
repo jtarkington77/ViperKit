@@ -525,18 +525,21 @@ public partial class MainWindow
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Name / keyword hunt: {keyword}");
+        sb.AppendLine($"Name / keyword hunt: \"{keyword}\"");
         sb.AppendLine();
 
+        if (HuntStatusText != null)
+            HuntStatusText.Text = "Status: searching processes...";
+
         // 1) Processes - run on background thread
-        sb.AppendLine("Processes with matching name:");
+        sb.AppendLine("=== RUNNING PROCESSES ===");
         bool anyProcess = false;
 
         try
         {
             var processMatches = await Task.Run(() =>
             {
-                var matches = new List<(string Name, int Id)>();
+                var matches = new List<(string Name, int Id, string? Path)>();
                 foreach (var proc in Process.GetProcesses())
                 {
                     try
@@ -544,94 +547,112 @@ public partial class MainWindow
                         string name = proc.ProcessName ?? string.Empty;
                         if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            matches.Add((name, proc.Id));
+                            string? exePath = null;
+                            try { exePath = proc.MainModule?.FileName; } catch { }
+                            matches.Add((name, proc.Id, exePath));
                         }
                     }
                     finally
                     {
-                        proc.Dispose(); // Properly dispose process objects
+                        proc.Dispose();
                     }
                 }
                 return matches;
             });
 
-            foreach (var (name, pid) in processMatches)
+            foreach (var (name, pid, path) in processMatches)
             {
                 anyProcess = true;
                 sb.AppendLine($"  {name} (PID {pid})");
+                if (!string.IsNullOrEmpty(path))
+                    sb.AppendLine($"    Path: {path}");
 
                 _huntResults.Add(new HuntResult
                 {
                     Category = "Process",
-                    Target   = $"{name} (PID {pid})",
-                    Severity = "INFO",
-                    Summary  = "Matching process name",
-                    Details  = $"Process ID: {pid}"
+                    Target   = path ?? $"{name} (PID {pid})",
+                    Severity = "WARN",
+                    Summary  = $"Running process: {name}",
+                    Details  = $"PID: {pid}"
                 });
             }
         }
         catch (Exception ex)
         {
-            sb.AppendLine($"  Error while enumerating processes: {ex.Message}");
+            sb.AppendLine($"  Error: {ex.Message}");
         }
 
         if (!anyProcess)
             sb.AppendLine("  (none found)");
 
-        // 2) Standard install locations: Program Files / Program Files (x86) / ProgramData
+        // 2) Build comprehensive search locations
+        if (HuntStatusText != null)
+            HuntStatusText.Text = "Status: building search locations...";
+
+        var searchRoots = BuildKeywordSearchRoots();
+
         sb.AppendLine();
-        sb.AppendLine("Install folders containing the keyword (top-level):");
+        sb.AppendLine($"=== FILE SYSTEM SEARCH ({searchRoots.Count} locations) ===");
 
-        bool anyDirMatch = false;
-        string[] roots =
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) // ProgramData
-        };
+        int totalFilesFound = 0;
+        int totalFoldersFound = 0;
+        int locationsSearched = 0;
 
-        // Run directory enumeration on background thread
-        var dirMatches = await Task.Run(() =>
+        foreach (var (label, rootPath) in searchRoots)
         {
-            var matches = new List<(string Dir, string Root)>();
-            foreach (var root in roots)
+            locationsSearched++;
+            if (HuntStatusText != null)
+                HuntStatusText.Text = $"Status: searching {label}... ({locationsSearched}/{searchRoots.Count})";
+
+            // Search this root for matching folders and files
+            var (folders, files) = await Task.Run(() => SearchLocationForKeyword(rootPath, keyword));
+
+            if (folders.Count > 0 || files.Count > 0)
             {
-                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-                    continue;
+                sb.AppendLine();
+                sb.AppendLine($"[{label}]");
 
-                try
+                foreach (var folder in folders)
                 {
-                    foreach (var dir in Directory.GetDirectories(root))
+                    totalFoldersFound++;
+                    sb.AppendLine($"  FOLDER: {folder}");
+
+                    _huntResults.Add(new HuntResult
                     {
-                        string dirName = Path.GetFileName(dir);
-                        if (dirName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            matches.Add((dir, root));
-                        }
-                    }
+                        Category = "Folder",
+                        Target   = folder,
+                        Severity = IsSuspiciousHuntLocation(folder) ? "WARN" : "INFO",
+                        Summary  = $"Folder matches \"{keyword}\"",
+                        Details  = $"Found in {label}"
+                    });
                 }
-                catch { /* ignore unreadable roots */ }
+
+                foreach (var file in files)
+                {
+                    totalFilesFound++;
+                    sb.AppendLine($"  FILE: {file}");
+
+                    _huntResults.Add(new HuntResult
+                    {
+                        Category = "File",
+                        Target   = file,
+                        Severity = IsSuspiciousHuntLocation(file) ? "WARN" : "INFO",
+                        Summary  = $"File matches \"{keyword}\"",
+                        Details  = $"Found in {label}"
+                    });
+                }
             }
-            return matches;
-        });
-
-        foreach (var (dir, root) in dirMatches)
-        {
-            anyDirMatch = true;
-            sb.AppendLine($"  {dir}");
-
-            _huntResults.Add(new HuntResult
-            {
-                Category = "File",
-                Target   = dir,
-                Severity = "INFO",
-                Summary  = "Install folder name match",
-                Details  = $"Top-level folder under {root}"
-            });
         }
 
-        if (!anyDirMatch)
-            sb.AppendLine("  (none found in Program Files / ProgramData)");
+        if (totalFilesFound == 0 && totalFoldersFound == 0)
+        {
+            sb.AppendLine("  (no matching files or folders found)");
+        }
+        else
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Total: {totalFoldersFound} folder(s), {totalFilesFound} file(s) matching \"{keyword}\"");
+        }
 
         // 3) Optional scope folder: file-name scan (e.g. point at C:\ or ProgramData)
         string? scopeFolder = HuntScopeFolderInput?.Text?.Trim();
@@ -1599,5 +1620,200 @@ public partial class MainWindow
         {
             // Case logging should never crash the UI either
         }
+    }
+
+    // ============================================
+    // COMPREHENSIVE KEYWORD SEARCH HELPERS
+    // ============================================
+
+    /// <summary>
+    /// Build a comprehensive list of search locations for keyword hunting.
+    /// Includes user-writable locations where malware commonly hides.
+    /// </summary>
+    private static List<(string Label, string Path)> BuildKeywordSearchRoots()
+    {
+        var roots = new List<(string Label, string Path)>();
+
+        // Standard install locations
+        AddHuntRootIfExists(roots, "Program Files",
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
+        AddHuntRootIfExists(roots, "Program Files (x86)",
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86));
+        AddHuntRootIfExists(roots, "ProgramData",
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
+
+        // Current user locations
+        AddHuntRootIfExists(roots, "AppData Roaming",
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+        AddHuntRootIfExists(roots, "AppData Local",
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        AddHuntRootIfExists(roots, "Desktop",
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+        AddHuntRootIfExists(roots, "Downloads",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
+        AddHuntRootIfExists(roots, "Documents",
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+
+        // Temp locations
+        AddHuntRootIfExists(roots, "User Temp", Path.GetTempPath());
+        AddHuntRootIfExists(roots, "Windows Temp",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"));
+
+        // Startup folders (common persistence)
+        AddHuntRootIfExists(roots, "Startup (User)",
+            Environment.GetFolderPath(Environment.SpecialFolder.Startup));
+        AddHuntRootIfExists(roots, "Startup (All Users)",
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup));
+
+        // Scan all user profiles if running elevated
+        try
+        {
+            string usersRoot = Path.GetDirectoryName(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)) ?? string.Empty;
+
+            if (Directory.Exists(usersRoot))
+            {
+                foreach (var userDir in Directory.GetDirectories(usersRoot))
+                {
+                    string userName = Path.GetFileName(userDir);
+                    if (string.IsNullOrWhiteSpace(userName))
+                        continue;
+
+                    string lower = userName.ToLowerInvariant();
+                    if (lower is "default" or "default user" or "public" or "all users")
+                        continue;
+
+                    // Skip current user (already added above)
+                    if (userDir.Equals(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // Add other users' key locations
+                    AddHuntRootIfExists(roots, $"AppData Roaming ({userName})",
+                        Path.Combine(userDir, "AppData", "Roaming"));
+                    AddHuntRootIfExists(roots, $"AppData Local ({userName})",
+                        Path.Combine(userDir, "AppData", "Local"));
+                    AddHuntRootIfExists(roots, $"Desktop ({userName})",
+                        Path.Combine(userDir, "Desktop"));
+                    AddHuntRootIfExists(roots, $"Downloads ({userName})",
+                        Path.Combine(userDir, "Downloads"));
+                    AddHuntRootIfExists(roots, $"Temp ({userName})",
+                        Path.Combine(userDir, "AppData", "Local", "Temp"));
+                }
+            }
+        }
+        catch
+        {
+            // User enumeration may fail without elevation - that's OK
+        }
+
+        return roots;
+    }
+
+    private static void AddHuntRootIfExists(List<(string Label, string Path)> roots, string label, string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+        {
+            // Avoid duplicates
+            if (!roots.Any(r => r.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                roots.Add((label, path));
+        }
+    }
+
+    /// <summary>
+    /// Search a location for folders and files matching the keyword.
+    /// Does partial/fuzzy matching on names.
+    /// </summary>
+    private static (List<string> Folders, List<string> Files) SearchLocationForKeyword(string rootPath, string keyword)
+    {
+        var folders = new List<string>();
+        var files = new List<string>();
+
+        const int MaxFilesToScan = 10000; // Safety limit per location
+        int filesScanned = 0;
+
+        try
+        {
+            var pending = new Stack<string>();
+            pending.Push(rootPath);
+
+            while (pending.Count > 0 && filesScanned < MaxFilesToScan)
+            {
+                var currentDir = pending.Pop();
+
+                // Check if this folder name matches
+                string folderName = Path.GetFileName(currentDir);
+                if (!string.IsNullOrEmpty(folderName) &&
+                    folderName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    !currentDir.Equals(rootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    folders.Add(currentDir);
+                }
+
+                // Get files in this directory
+                try
+                {
+                    foreach (var file in Directory.GetFiles(currentDir))
+                    {
+                        filesScanned++;
+                        if (filesScanned >= MaxFilesToScan)
+                            break;
+
+                        string fileName = Path.GetFileName(file);
+                        if (fileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            files.Add(file);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip unreadable directories
+                }
+
+                // Queue subdirectories
+                try
+                {
+                    foreach (var subDir in Directory.GetDirectories(currentDir))
+                    {
+                        pending.Push(subDir);
+                    }
+                }
+                catch
+                {
+                    // Skip unreadable directories
+                }
+            }
+        }
+        catch
+        {
+            // Root-level errors
+        }
+
+        return (folders, files);
+    }
+
+    /// <summary>
+    /// Check if a path is in a suspicious location (user-writable, temp, etc.)
+    /// </summary>
+    private static bool IsSuspiciousHuntLocation(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string lower = path.ToLowerInvariant().Replace('/', '\\');
+
+        // User-writable locations are suspicious for installed software
+        if (lower.Contains(@"\appdata\") ||
+            lower.Contains(@"\temp\") ||
+            lower.Contains(@"\downloads\") ||
+            lower.Contains(@"\desktop\") ||
+            lower.Contains(@"\documents\") ||
+            lower.Contains(@"\public\"))
+        {
+            return true;
+        }
+
+        return false;
     }
 }

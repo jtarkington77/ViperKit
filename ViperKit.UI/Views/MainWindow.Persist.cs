@@ -1892,14 +1892,24 @@ private void CollectAppInitDllsHive(string label, RegistryKey root, string subKe
             : item.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase) ? "MEDIUM"
             : "LOW";
 
+        // For registry items, use RegistryPath as OriginalPath (that's what we're deleting)
+        // For files/services/tasks, use the executable Path
+        string originalPath = itemType switch
+        {
+            "RegistryKey" => item.RegistryPath,  // Delete the registry key, not the exe it points to
+            _ => !string.IsNullOrEmpty(item.Path) ? item.Path : item.RegistryPath
+        };
+
         var cleanupItem = new CleanupItem
         {
             ItemType = itemType,
             Name = item.Name,
-            OriginalPath = !string.IsNullOrEmpty(item.Path) ? item.Path : item.RegistryPath,
+            OriginalPath = originalPath,
             SourceTab = "Persist",
             Severity = severity,
-            Reason = item.Reason,
+            Reason = !string.IsNullOrEmpty(item.Path) && itemType == "RegistryKey"
+                ? $"{item.Reason} (Executable: {item.Path})"  // Include exe path in reason for context
+                : item.Reason,
             Action = action
         };
 

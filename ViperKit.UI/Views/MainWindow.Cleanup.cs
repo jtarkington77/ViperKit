@@ -15,6 +15,9 @@ public partial class MainWindow
 {
 #pragma warning disable CA1416 // Windows-only APIs
 
+    // Track selected cleanup item (workaround for ListBox selection issues)
+    private CleanupItem? _selectedCleanupItem;
+
     // ----------------------------
     // CLEANUP – Refresh Queue Display
     // ----------------------------
@@ -23,11 +26,78 @@ public partial class MainWindow
         if (CleanupQueueList == null)
             return;
 
-        var queue = CaseManager.GetCleanupQueue();
-        CleanupQueueList.ItemsSource = null;
-        CleanupQueueList.ItemsSource = queue.ToArray();
+        try
+        {
+            var queue = CaseManager.GetCleanupQueue().ToList();
 
-        UpdateCleanupStats();
+            // Update items source (ItemsControl doesn't have SelectedItem)
+            CleanupQueueList.ItemsSource = queue;
+
+            // Refresh selected item if it still exists
+            if (_selectedCleanupItem != null)
+            {
+                var refreshed = queue.FirstOrDefault(c => c.Id == _selectedCleanupItem.Id);
+                if (refreshed != null)
+                {
+                    _selectedCleanupItem = refreshed;
+                    UpdateCleanupDetailPanel(refreshed);
+                }
+            }
+
+            UpdateCleanupStats();
+
+            // Show quarantine folder path to user
+            if (CleanupQuarantinePathText != null)
+            {
+                string quarantinePath = CleanupJournal.GetCaseQuarantineFolder(CaseManager.CaseId);
+                CleanupQuarantinePathText.Text = $"Quarantine folder: {quarantinePath}";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (CleanupStatusText != null)
+                CleanupStatusText.Text = $"Error refreshing queue: {ex.Message}";
+        }
+    }
+
+    // ----------------------------
+    // CLEANUP – Item Click Handler
+    // ----------------------------
+    private void CleanupItem_OnPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        try
+        {
+            if (sender is Avalonia.Controls.Border border && border.DataContext is CleanupItem item)
+            {
+                _selectedCleanupItem = item;
+                UpdateCleanupDetailPanel(item);
+
+                // Visual feedback - highlight selected item
+                HighlightSelectedCleanupItem(border);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (CleanupStatusText != null)
+                CleanupStatusText.Text = $"Selection error: {ex.Message}";
+        }
+    }
+
+    private Avalonia.Controls.Border? _lastSelectedBorder;
+
+    private void HighlightSelectedCleanupItem(Avalonia.Controls.Border selectedBorder)
+    {
+        // Reset previous selection
+        if (_lastSelectedBorder != null)
+        {
+            _lastSelectedBorder.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#333"));
+            _lastSelectedBorder.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#0D1517"));
+        }
+
+        // Highlight new selection
+        selectedBorder.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#00FFF8"));
+        selectedBorder.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1A3A4A"));
+        _lastSelectedBorder = selectedBorder;
     }
 
     private void UpdateCleanupStats()
@@ -98,7 +168,8 @@ public partial class MainWindow
     // ----------------------------
     private async void CleanupExecuteSelectedButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (CleanupQueueList?.SelectedItem is not CleanupItem item)
+        var item = _selectedCleanupItem;
+        if (item == null)
         {
             if (CleanupStatusText != null)
                 CleanupStatusText.Text = "Status: select an item to execute.";
@@ -177,7 +248,7 @@ public partial class MainWindow
     {
         if (!File.Exists(item.OriginalPath))
         {
-            CaseManager.UpdateCleanupItemStatus(item.Id, "Failed", "File not found");
+            CaseManager.UpdateCleanupItemStatus(item.Id, "Failed", "File not found at: " + item.OriginalPath);
             return false;
         }
 
@@ -189,13 +260,12 @@ public partial class MainWindow
         string quarantinePath = Path.Combine(caseFolder, "files", $"{item.Id}_{fileName}");
         Directory.CreateDirectory(Path.GetDirectoryName(quarantinePath)!);
 
+        // Try Move first (fastest, atomic)
         try
         {
-            // Move file to quarantine
             File.Move(item.OriginalPath, quarantinePath);
             item.QuarantinePath = quarantinePath;
 
-            // Record in journal for undo
             CleanupJournal.RecordAction(new CleanupJournalEntry
             {
                 ItemId = item.Id,
@@ -210,9 +280,78 @@ public partial class MainWindow
 
             return true;
         }
+        catch (IOException)
+        {
+            // File might be in use - try copy+delete approach
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Permission denied - try copy+delete approach
+        }
+
+        // Fallback: Copy to quarantine, then try to delete original
+        try
+        {
+            File.Copy(item.OriginalPath, quarantinePath, overwrite: true);
+            item.QuarantinePath = quarantinePath;
+
+            // Try to delete original
+            try
+            {
+                File.Delete(item.OriginalPath);
+
+                CleanupJournal.RecordAction(new CleanupJournalEntry
+                {
+                    ItemId = item.Id,
+                    ActionType = "Quarantine",
+                    OriginalState = item.OriginalPath,
+                    NewState = quarantinePath,
+                    CaseId = CaseManager.CaseId
+                });
+
+                CaseManager.AddEvent("Cleanup", "File quarantined", "INFO", item.Name,
+                    $"Copied to {quarantinePath} and deleted original");
+
+                return true;
+            }
+            catch (Exception delEx)
+            {
+                // Copied but couldn't delete - partial success, rename original
+                string renamedPath = item.OriginalPath + ".viperkit_quarantined";
+                try
+                {
+                    File.Move(item.OriginalPath, renamedPath);
+
+                    CleanupJournal.RecordAction(new CleanupJournalEntry
+                    {
+                        ItemId = item.Id,
+                        ActionType = "Quarantine",
+                        OriginalState = item.OriginalPath,
+                        NewState = $"{quarantinePath} (original renamed to {renamedPath})",
+                        CaseId = CaseManager.CaseId
+                    });
+
+                    CaseManager.AddEvent("Cleanup", "File quarantined (partial)", "WARN", item.Name,
+                        $"Copied to {quarantinePath}. Original renamed to {renamedPath} (could not delete: {delEx.Message})");
+
+                    return true;
+                }
+                catch
+                {
+                    // Even rename failed - file is probably locked
+                    CaseManager.AddEvent("Cleanup", "File copied to quarantine", "WARN", item.Name,
+                        $"Copied to {quarantinePath} but original file is locked. Manual deletion required after reboot.");
+
+                    CaseManager.UpdateCleanupItemStatus(item.Id, "Failed",
+                        $"File copied to quarantine but original is locked. Delete manually after reboot: {item.OriginalPath}");
+                    return false;
+                }
+            }
+        }
         catch (Exception ex)
         {
-            CaseManager.UpdateCleanupItemStatus(item.Id, "Failed", ex.Message);
+            CaseManager.UpdateCleanupItemStatus(item.Id, "Failed",
+                $"Could not quarantine file: {ex.Message}. File may be in use or protected.");
             return false;
         }
     }
@@ -466,7 +605,8 @@ public partial class MainWindow
     // ----------------------------
     private async void CleanupUndoSelectedButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (CleanupQueueList?.SelectedItem is not CleanupItem item)
+        var item = _selectedCleanupItem;
+        if (item == null)
         {
             if (CleanupStatusText != null)
                 CleanupStatusText.Text = "Status: select an item to undo.";
@@ -623,7 +763,8 @@ public partial class MainWindow
     // ----------------------------
     private void CleanupRemoveSelectedButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (CleanupQueueList?.SelectedItem is not CleanupItem item)
+        var item = _selectedCleanupItem;
+        if (item == null)
         {
             if (CleanupStatusText != null)
                 CleanupStatusText.Text = "Status: select an item to remove.";
@@ -693,6 +834,108 @@ public partial class MainWindow
 
         if (CleanupStatusText != null)
             CleanupStatusText.Text = $"Status: removed {removed} pending items from queue.";
+    }
+
+
+    // ----------------------------
+    // CLEANUP – Update Detail Panel
+    // ----------------------------
+    private void UpdateCleanupDetailPanel(CleanupItem item)
+    {
+        try
+        {
+            // Show the detail panel, hide the "no selection" message
+            if (CleanupDetailNoSelection != null)
+                CleanupDetailNoSelection.IsVisible = false;
+            if (CleanupDetailPanel != null)
+                CleanupDetailPanel.IsVisible = true;
+
+            // Populate detail fields (with null-safe access)
+            if (CleanupDetailType != null)
+                CleanupDetailType.Text = $"Type: {item.ItemType ?? "Unknown"}";
+            if (CleanupDetailName != null)
+                CleanupDetailName.Text = item.Name ?? "Unknown";
+            if (CleanupDetailPath != null)
+                CleanupDetailPath.Text = $"Path: {item.OriginalPath ?? "N/A"}";
+            if (CleanupDetailAction != null)
+                CleanupDetailAction.Text = $"Action: {item.Action ?? "N/A"}";
+            if (CleanupDetailStatus != null)
+            {
+                string status = item.Status ?? "Unknown";
+                CleanupDetailStatus.Text = $"Status: {status}";
+                CleanupDetailStatus.Foreground = new Avalonia.Media.SolidColorBrush(
+                    status.ToLowerInvariant() switch
+                    {
+                        "completed" => Avalonia.Media.Color.Parse("#99CC99"),
+                        "failed" => Avalonia.Media.Color.Parse("#FF9999"),
+                        "inprogress" => Avalonia.Media.Color.Parse("#FFCC66"),
+                        _ => Avalonia.Media.Color.Parse("#AAAAAA")
+                    });
+            }
+            if (CleanupDetailSeverity != null)
+            {
+                string severity = item.Severity ?? "LOW";
+                CleanupDetailSeverity.Text = $"Severity: {severity}";
+                CleanupDetailSeverity.Foreground = new Avalonia.Media.SolidColorBrush(
+                    severity.ToUpperInvariant() switch
+                    {
+                        "HIGH" => Avalonia.Media.Color.Parse("#FF9999"),
+                        "MEDIUM" => Avalonia.Media.Color.Parse("#FFCC66"),
+                        _ => Avalonia.Media.Color.Parse("#99CC99")
+                    });
+            }
+            if (CleanupDetailSource != null)
+                CleanupDetailSource.Text = $"Source: {item.SourceTab ?? "N/A"}";
+            if (CleanupDetailReason != null)
+                CleanupDetailReason.Text = $"Reason: {item.Reason ?? "N/A"}";
+
+            // Quarantine path (only show if set)
+            if (CleanupDetailQuarantine != null)
+            {
+                if (!string.IsNullOrEmpty(item.QuarantinePath))
+                {
+                    CleanupDetailQuarantine.Text = $"Quarantine: {item.QuarantinePath}";
+                    CleanupDetailQuarantine.IsVisible = true;
+                }
+                else
+                {
+                    CleanupDetailQuarantine.IsVisible = false;
+                }
+            }
+
+            // Error message (show prominently if failed)
+            if (CleanupDetailErrorBorder != null && CleanupDetailError != null)
+            {
+                if (!string.IsNullOrEmpty(item.ErrorMessage))
+                {
+                    CleanupDetailError.Text = item.ErrorMessage;
+                    CleanupDetailErrorBorder.IsVisible = true;
+                }
+                else
+                {
+                    CleanupDetailErrorBorder.IsVisible = false;
+                }
+            }
+
+            // Update status bar
+            if (CleanupStatusText != null)
+            {
+                if (!string.IsNullOrEmpty(item.ErrorMessage))
+                {
+                    CleanupStatusText.Text = $"Selected: {item.Name ?? "Unknown"} - FAILED: {item.ErrorMessage}";
+                }
+                else
+                {
+                    CleanupStatusText.Text = $"Selected: {item.Name ?? "Unknown"} ({item.Status ?? "Unknown"})";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't crash
+            if (CleanupStatusText != null)
+                CleanupStatusText.Text = $"Error displaying item: {ex.Message}";
+        }
     }
 
 #pragma warning restore CA1416

@@ -20,6 +20,9 @@ public partial class MainWindow : Window
 
         DataContext = new MainWindowViewModel();
         PopulateSystemSnapshot();
+
+        // Initialize Demo Mode
+        InitializeDemoMode();
     }
 
     // =========================
@@ -183,6 +186,42 @@ public partial class MainWindow : Window
             statusBlock.Text = "Focus: (none)";
 
         BindPersistResults();
+    }
+
+    // Handle tab selection changes - refresh relevant data when tabs are selected
+    private void MainTabs_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // Only process TabControl selection changes, not nested combo boxes
+        if (sender is not TabControl tabControl)
+            return;
+
+        // Verify it's actually our main tabs by checking x:Name
+        if (tabControl != MainTabs)
+            return;
+
+        try
+        {
+            int selectedIndex = tabControl.SelectedIndex;
+
+            // Tab indices: 0=Dashboard, 1=Hunt, 2=Persist, 3=Sweep, 4=Cleanup, 5=Harden, 6=Case, 7=Help
+            switch (selectedIndex)
+            {
+                case 0: // Dashboard - refresh summary
+                    UpdateDashboardCaseSummary();
+                    break;
+                case 4: // Cleanup tab - refresh the queue
+                    RefreshCleanupQueue();
+                    break;
+                case 6: // Case tab - refresh case events
+                    RefreshCaseTab();
+                    UpdateDashboardCaseSummary();
+                    break;
+            }
+        }
+        catch
+        {
+            // Tab refresh should never crash the app
+        }
     }
 
     private void HuntSetCaseFocusButton_OnClick(object? sender, RoutedEventArgs e)

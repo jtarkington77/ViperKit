@@ -48,7 +48,7 @@
             Padding="12,8,12,12">
 
       <!-- SIMPLE TABS – Avalonia defaults -->
-      <TabControl TabStripPlacement="Top">
+      <TabControl x:Name="MainTabs" TabStripPlacement="Top" SelectionChanged="MainTabs_OnSelectionChanged">
 
                 <!-- DASHBOARD -->
                 <TabItem Header="Dashboard">
@@ -138,6 +138,200 @@
 
                       </Grid>
 
+                      <!-- DEMO MODE PANEL -->
+                      <Border Background="#0A1518"
+                              Padding="12"
+                              CornerRadius="6"
+                              BorderBrush="#1A4A3F"
+                              BorderThickness="1">
+                        <StackPanel Spacing="12">
+                          <!-- Demo Header -->
+                          <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="Demo Mode"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="#00FFFA" />
+                              <TextBlock Text="Guided training walkthrough"
+                                        FontSize="12"
+                                        Foreground="#8FA9AA"
+                                        VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                              <Button x:Name="DemoStartButton"
+                                      Content="Start Demo"
+                                      Click="DemoStartButton_OnClick"
+                                      MinWidth="100"
+                                      Background="#1A4A3A"
+                                      Foreground="#88FFAA" />
+                              <Button x:Name="DemoEndButton"
+                                      Content="End Demo"
+                                      Click="DemoEndButton_OnClick"
+                                      MinWidth="100"
+                                      IsEnabled="False"
+                                      Background="#4A2A2A"
+                                      Foreground="#FFAAAA" />
+                            </StackPanel>
+                          </Grid>
+
+                          <!-- Demo Description (shown when not active) -->
+                          <TextBlock Text="Learn ViperKit with a guided walkthrough using harmless test artifacts. Creates demo files, registry keys, and scheduled task, then walks you through Hunt, Persist, Sweep, and Cleanup. Perfect for training and proof-of-concept."
+                                    FontSize="11"
+                                    Foreground="#6A8A8B"
+                                    TextWrapping="Wrap" />
+
+                          <!-- Demo Status -->
+                          <TextBlock x:Name="DemoStatusText"
+                                    Text="Status: Ready to start demo"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA" />
+
+                          <!-- Walkthrough Panel (visible when demo active) -->
+                          <Border x:Name="DemoWalkthroughPanel"
+                                  Background="#050D10"
+                                  Padding="12"
+                                  CornerRadius="4"
+                                  BorderBrush="#1A3A4A"
+                                  BorderThickness="1"
+                                  IsVisible="False">
+                            <StackPanel Spacing="10">
+                              <!-- Progress -->
+                              <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock x:Name="DemoStepIndicator"
+                                          Grid.Column="0"
+                                          Text="Step 1 of 6"
+                                          FontSize="11"
+                                          Foreground="#00FFFA"
+                                          FontWeight="Bold" />
+                                <ProgressBar x:Name="DemoProgressBar"
+                                            Grid.Column="1"
+                                            Margin="12,0"
+                                            Minimum="0"
+                                            Maximum="6"
+                                            Value="1"
+                                            Height="6" />
+                                <Button x:Name="DemoViewArtifactsButton"
+                                        Grid.Column="2"
+                                        Content="View Artifacts"
+                                        Click="DemoViewArtifactsButton_OnClick"
+                                        FontSize="10"
+                                        Padding="8,2" />
+                              </Grid>
+
+                              <!-- Step Title -->
+                              <TextBlock x:Name="DemoStepTitle"
+                                        Text=""
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="#EAF7F7" />
+
+                              <!-- Instructions -->
+                              <TextBlock x:Name="DemoInstructions"
+                                        Text=""
+                                        FontSize="12"
+                                        Foreground="#C7D4D4"
+                                        TextWrapping="Wrap" />
+
+                              <!-- Expected Findings -->
+                              <Border Background="#0A1A20" Padding="8" CornerRadius="3">
+                                <StackPanel>
+                                  <TextBlock Text="What you should find:"
+                                            FontSize="10"
+                                            FontWeight="Bold"
+                                            Foreground="#88AACC" />
+                                  <TextBlock x:Name="DemoExpectedFindings"
+                                            Text=""
+                                            FontSize="11"
+                                            Foreground="#AACCDD"
+                                            TextWrapping="Wrap"
+                                            Margin="0,4,0,0" />
+                                </StackPanel>
+                              </Border>
+
+                              <!-- Tip -->
+                              <TextBlock FontSize="11" Foreground="#FFB347" TextWrapping="Wrap">
+                                <Run Text="Tip: " FontWeight="Bold" />
+                                <Run x:Name="DemoTip" Text="" />
+                              </TextBlock>
+
+                              <!-- Action -->
+                              <TextBlock x:Name="DemoAction"
+                                        Text=""
+                                        FontSize="11"
+                                        Foreground="#88FF88"
+                                        FontWeight="SemiBold" />
+
+                              <!-- Learning Point -->
+                              <TextBlock FontSize="10" Foreground="#8899AA" TextWrapping="Wrap" FontStyle="Italic">
+                                <Run x:Name="DemoLearningPoint" Text="" />
+                              </TextBlock>
+
+                              <!-- Navigation -->
+                              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                                <Button x:Name="DemoPrevButton"
+                                        Content="Previous"
+                                        Click="DemoPrevButton_OnClick"
+                                        MinWidth="80"
+                                        IsEnabled="False" />
+                                <Button x:Name="DemoGoToTabButton"
+                                        Content="Go to Hunt tab"
+                                        Click="DemoGoToTabButton_OnClick"
+                                        MinWidth="120"
+                                        Background="#1A3A4A" />
+                                <Button x:Name="DemoCopySearchButton"
+                                        Content="Copy Search Term"
+                                        Click="DemoCopySearchButton_OnClick"
+                                        MinWidth="120" />
+                                <Button x:Name="DemoNextButton"
+                                        Content="Next Step"
+                                        Click="DemoNextButton_OnClick"
+                                        MinWidth="100"
+                                        Background="#1A4A3A"
+                                        Foreground="#88FFAA" />
+                              </StackPanel>
+                            </StackPanel>
+                          </Border>
+
+                          <!-- Artifacts Panel (collapsible) -->
+                          <Border x:Name="DemoArtifactsPanel"
+                                  Background="#050D10"
+                                  Padding="8"
+                                  CornerRadius="4"
+                                  BorderBrush="#333"
+                                  BorderThickness="1"
+                                  IsVisible="False">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="Demo Artifacts Created:"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#AABBCC" />
+                              <ItemsControl x:Name="DemoArtifactsList">
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate x:DataType="models:DemoArtifact">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
+                                      <TextBlock Text="{Binding StatusIcon}"
+                                                FontSize="10"
+                                                Width="12" />
+                                      <TextBlock Text="{Binding TypeIcon}"
+                                                FontSize="10"
+                                                Width="16" />
+                                      <TextBlock Text="{Binding Name}"
+                                                FontSize="10"
+                                                Foreground="#AABBCC"
+                                                Width="120" />
+                                      <TextBlock Text="{Binding Description}"
+                                                FontSize="9"
+                                                Foreground="#778899"
+                                                TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </Border>
+
                       <!-- DASHBOARD STATUS / MESSAGES -->
                       <TextBlock x:Name="DashboardStatusText"
                                 Text="Status: case initialising..."
@@ -176,7 +370,8 @@
                                         Watermark="Paste path, hash, domain, IP, registry key..." />
 
                                 <ComboBox x:Name="HuntIocType"
-                                          Width="170">
+                                          Width="170"
+                                          SelectedIndex="0">
                                   <ComboBoxItem Content="Auto"      />
                                   <ComboBoxItem Content="File path" />
                                   <ComboBoxItem Content="Hash"      />
@@ -1291,6 +1486,12 @@
                           Foreground="#C7D4D4"
                           VerticalAlignment="Center" />
 
+                <TextBlock x:Name="CleanupQuarantinePathText"
+                          Text="Quarantine: (not set)"
+                          Foreground="#6B8A8A"
+                          VerticalAlignment="Center"
+                          FontSize="11" />
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Text="Quarantine:"
                             Foreground="#8FA9AA"
@@ -1334,130 +1535,84 @@
             <!-- Queue list + detail panel -->
             <Grid Grid.Row="3"
                   ColumnDefinitions="2*,*">
-              <!-- Queue List -->
-              <ListBox x:Name="CleanupQueueList"
-                      Grid.Column="0"
-                      Margin="0,0,8,0">
-                <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="models:CleanupItem">
-                    <Border Padding="8"
-                            Margin="0,0,0,6"
-                            CornerRadius="4"
-                            BorderThickness="1"
-                            BorderBrush="#333">
-                      <Grid ColumnDefinitions="Auto,*,Auto">
-                        <!-- Type icon + Status -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding ItemTypeIcon}"
-                                    FontSize="16"
-                                    VerticalAlignment="Center" />
-                          <Border Padding="6,2"
-                                  CornerRadius="3"
-                                  Background="{Binding StatusBackground}">
-                            <TextBlock Text="{Binding Status}"
-                                      FontSize="10"
-                                      Foreground="{Binding StatusForeground}"
-                                      FontWeight="SemiBold" />
-                          </Border>
-                          <Border Padding="6,2"
-                                  CornerRadius="3"
-                                  Background="{Binding SeverityBackground}">
-                            <TextBlock Text="{Binding Severity}"
-                                      FontSize="10"
-                                      Foreground="{Binding SeverityForeground}"
-                                      FontWeight="SemiBold" />
-                          </Border>
-                        </StackPanel>
-
-                        <!-- Name + Path -->
-                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Name}"
-                                    FontWeight="SemiBold"
-                                    FontSize="13"
-                                    Foreground="#E7F2F2" />
-                          <TextBlock Text="{Binding OriginalPath}"
-                                    FontSize="11"
-                                    Foreground="#8FA9AA"
-                                    TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <!-- Source + Action -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Action}"
-                                    FontSize="11"
-                                    Foreground="#00FFF8"
-                                    VerticalAlignment="Center" />
-                          <TextBlock FontSize="10"
-                                    Foreground="#666"
-                                    VerticalAlignment="Center">
-                            <Run Text="from " />
-                            <Run Text="{Binding SourceTab}" />
-                          </TextBlock>
-                        </StackPanel>
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
+              <!-- Queue List - Using ItemsControl to avoid ListBox selection crash -->
+              <ScrollViewer Grid.Column="0" Margin="0,0,8,0">
+                <ItemsControl x:Name="CleanupQueueList" Background="#050A0C">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:CleanupItem">
+                      <Border Padding="8"
+                              Margin="0,0,0,4"
+                              CornerRadius="4"
+                              BorderThickness="2"
+                              BorderBrush="#333"
+                              Background="#0D1517"
+                              PointerPressed="CleanupItem_OnPointerPressed"
+                              Cursor="Hand">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ItemTypeIcon}" FontSize="16" VerticalAlignment="Center" />
+                            <Border Padding="6,2" CornerRadius="3" Background="{Binding StatusBackground}">
+                              <TextBlock Text="{Binding Status}" FontSize="10" Foreground="{Binding StatusForeground}" FontWeight="SemiBold" />
+                            </Border>
+                            <Border Padding="6,2" CornerRadius="3" Background="{Binding SeverityBackground}">
+                              <TextBlock Text="{Binding Severity}" FontSize="10" Foreground="{Binding SeverityForeground}" FontWeight="SemiBold" />
+                            </Border>
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="#E7F2F2" />
+                            <TextBlock Text="{Binding OriginalPath}" FontSize="11" Foreground="#8FA9AA" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Action}" FontSize="11" Foreground="#00FFF8" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SourceTab}" FontSize="10" Foreground="#666" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
 
               <!-- Detail panel -->
               <Border Grid.Column="1"
                       Background="#0A1214"
                       CornerRadius="4"
                       BorderThickness="1"
-                      BorderBrush="#333">
-                <StackPanel DataContext="{Binding SelectedItem, ElementName=CleanupQueueList}"
-                            x:DataType="models:CleanupItem"
-                            Spacing="8"
-                            Margin="12">
-                  <TextBlock Text="Selected Item"
+                      BorderBrush="#333"
+                      Padding="12">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Selected Item Details"
                             FontSize="14"
                             FontWeight="SemiBold"
                             Foreground="#E7F2F2" />
 
-                  <StackPanel Spacing="4">
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Type: " />
-                      <Run Text="{Binding ItemType}" Foreground="#C7D4D4" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Name: " />
-                      <Run Text="{Binding Name}" Foreground="#C7D4D4" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Path: " />
-                      <Run Text="{Binding OriginalPath}" Foreground="#C7D4D4" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Action: " />
-                      <Run Text="{Binding Action}" Foreground="#00FFF8" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Status: " />
-                      <Run Text="{Binding Status}" Foreground="{Binding StatusForeground}" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Severity: " />
-                      <Run Text="{Binding Severity}" Foreground="{Binding SeverityForeground}" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA">
-                      <Run Text="Source: " />
-                      <Run Text="{Binding SourceTab}" Foreground="#C7D4D4" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA" TextWrapping="Wrap">
-                      <Run Text="Reason: " />
-                      <Run Text="{Binding Reason}" Foreground="#C7D4D4" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#8FA9AA" TextWrapping="Wrap"
-                              IsVisible="{Binding QuarantinePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                      <Run Text="Quarantine: " />
-                      <Run Text="{Binding QuarantinePath}" Foreground="#99CC99" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="#FF9999" TextWrapping="Wrap"
-                              IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                      <Run Text="Error: " />
-                      <Run Text="{Binding ErrorMessage}" />
-                    </TextBlock>
+                  <TextBlock x:Name="CleanupDetailNoSelection"
+                            Text="Click an item to view details"
+                            FontSize="11"
+                            Foreground="#666"
+                            FontStyle="Italic" />
+
+                  <StackPanel x:Name="CleanupDetailPanel" Spacing="6" IsVisible="False">
+                    <TextBlock x:Name="CleanupDetailType" FontSize="11" Foreground="#C7D4D4" />
+                    <TextBlock x:Name="CleanupDetailName" FontSize="12" Foreground="#E7F2F2" FontWeight="SemiBold" />
+                    <TextBlock x:Name="CleanupDetailPath" FontSize="11" Foreground="#8FA9AA" TextWrapping="Wrap" />
+                    <TextBlock x:Name="CleanupDetailAction" FontSize="11" Foreground="#00FFF8" />
+                    <TextBlock x:Name="CleanupDetailStatus" FontSize="11" />
+                    <TextBlock x:Name="CleanupDetailSeverity" FontSize="11" />
+                    <TextBlock x:Name="CleanupDetailSource" FontSize="11" Foreground="#8FA9AA" />
+                    <TextBlock x:Name="CleanupDetailReason" FontSize="11" Foreground="#C7D4D4" TextWrapping="Wrap" />
+                    <TextBlock x:Name="CleanupDetailQuarantine" FontSize="11" Foreground="#99CC99" TextWrapping="Wrap" />
+                    <Border x:Name="CleanupDetailErrorBorder"
+                            Background="#3A1E2C"
+                            CornerRadius="4"
+                            Padding="8"
+                            IsVisible="False"
+                            Margin="0,8,0,0">
+                      <StackPanel>
+                        <TextBlock Text="ERROR:" FontSize="11" Foreground="#FF6666" FontWeight="Bold" />
+                        <TextBlock x:Name="CleanupDetailError" FontSize="11" Foreground="#FF9999" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Border>
                   </StackPanel>
                 </StackPanel>
               </Border>
