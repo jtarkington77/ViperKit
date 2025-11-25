@@ -157,7 +157,7 @@ ViperKit provides a **guided incident workflow** that walks you from initial det
 
 ### Option 1: Portable Exe (Recommended)
 
-1. Download the latest release from [Releases](https://github.com/jtarkington77/VenomousViper/releases)
+1. Download the latest release from [Releases](https://github.com/jtarkington77/ViperKit/releases)
 2. Extract to a folder (e.g., `C:\Tools\ViperKit`)
 3. Right-click `ViperKit.UI.exe` → **Run as Administrator**
 
