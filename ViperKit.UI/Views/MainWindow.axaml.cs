@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ViperKit.UI.ViewModels;
@@ -20,6 +21,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = new MainWindowViewModel();
 
+        // Check admin status and show warning if needed
+        CheckAdminStatus();
+
+        // Load hunt history
+        LoadHuntHistory();
+
         // Show case selection panel, don't auto-start case
         ShowCaseSelectionPanel();
         RefreshAvailableCases();
@@ -27,6 +34,112 @@ public partial class MainWindow : Window
 
         // Initialize Demo Mode
         InitializeDemoMode();
+    }
+
+    private void CheckAdminStatus()
+    {
+        try
+        {
+            bool isAdmin = false;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+                {
+                    WindowsPrincipal principal = new WindowsPrincipal(identity);
+                    isAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+                }
+            }
+
+            // Show/hide the admin warning banner
+            if (AdminWarningBanner != null)
+            {
+                AdminWarningBanner.IsVisible = !isAdmin;
+            }
+        }
+        catch
+        {
+            // If we can't determine admin status, assume not admin and show warning
+            if (AdminWarningBanner != null)
+            {
+                AdminWarningBanner.IsVisible = true;
+            }
+        }
+    }
+
+    private async System.Threading.Tasks.Task<bool> ShowConfirmationDialog(string title, string message)
+    {
+        try
+        {
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 500,
+                Height = 250,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false
+            };
+
+            bool result = false;
+
+            var panel = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(20),
+                Spacing = 20
+            };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = message,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                FontSize = 13
+            });
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                Spacing = 10
+            };
+
+            var okButton = new Button
+            {
+                Content = "OK",
+                Width = 100,
+                Height = 35
+            };
+            okButton.Click += (s, e) =>
+            {
+                result = true;
+                dialog.Close();
+            };
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                Width = 100,
+                Height = 35
+            };
+            cancelButton.Click += (s, e) =>
+            {
+                result = false;
+                dialog.Close();
+            };
+
+            buttonPanel.Children.Add(okButton);
+            buttonPanel.Children.Add(cancelButton);
+            panel.Children.Add(buttonPanel);
+
+            dialog.Content = panel;
+
+            await dialog.ShowDialog(this);
+            return result;
+        }
+        catch
+        {
+            // If dialog fails, default to not confirmed (safe choice)
+            return false;
+        }
     }
 
     // =========================

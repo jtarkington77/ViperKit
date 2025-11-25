@@ -127,6 +127,21 @@ public partial class MainWindow
                 return;
             }
 
+            // Confirmation dialog for destructive action
+            var confirmed = await ShowConfirmationDialog(
+                "Confirm Cleanup Execution",
+                $"You are about to execute cleanup on {pendingItems.Count} items.\n\n" +
+                "⚠ WARNING: File deletions CANNOT be undone!\n\n" +
+                "Have you exported the case report?\n\n" +
+                "Click OK to proceed with cleanup, or Cancel to abort.");
+
+            if (!confirmed)
+            {
+                if (CleanupStatusText != null)
+                    CleanupStatusText.Text = "Status: cleanup cancelled by user.";
+                return;
+            }
+
             int processed = 0;
             int failed = 0;
 
@@ -180,6 +195,22 @@ public partial class MainWindow
         {
             if (CleanupStatusText != null)
                 CleanupStatusText.Text = $"Status: item is already {item.Status.ToLower()}.";
+            return;
+        }
+
+        // Confirmation dialog for destructive action
+        var confirmed = await ShowConfirmationDialog(
+            "Confirm Cleanup Action",
+            $"You are about to execute cleanup on:\n\n" +
+            $"{item.ItemType}: {item.Name}\n" +
+            $"Action: {item.Action}\n\n" +
+            "⚠ WARNING: This action may not be reversible!\n\n" +
+            "Click OK to proceed, or Cancel to abort.");
+
+        if (!confirmed)
+        {
+            if (CleanupStatusText != null)
+                CleanupStatusText.Text = "Status: cleanup cancelled by user.";
             return;
         }
 

@@ -5,6 +5,7 @@
         Width="1200"
         Height="750"
         Title="ViperKit"
+        Icon="avares://ViperKit.UI/Assets/viperkit.ico"
         Background="#05090A">
 
 
@@ -53,7 +54,8 @@
                 <!-- DASHBOARD -->
                 <TabItem Header="Dashboard">
                   <Border Background="#0B1518" Padding="16">
-                    <StackPanel Orientation="Vertical" Spacing="16">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                      <StackPanel Orientation="Vertical" Spacing="16">
 
                       <!-- TITLE -->
                       <TextBlock Text="Dashboard"
@@ -65,6 +67,27 @@
                                 FontSize="13"
                                 Foreground="#8FA9AA"
                                 TextWrapping="Wrap" />
+
+                      <!-- ADMIN WARNING BANNER (shown if NOT running as admin) -->
+                      <Border x:Name="AdminWarningBanner"
+                              Background="#2A0A0A"
+                              Padding="12"
+                              CornerRadius="6"
+                              BorderBrush="#DD3333"
+                              BorderThickness="3"
+                              IsVisible="False">
+                        <StackPanel Spacing="6">
+                          <TextBlock Text="🚫 NOT RUNNING AS ADMINISTRATOR"
+                                    FontSize="13"
+                                    FontWeight="Bold"
+                                    Foreground="#FF3333" />
+                          <TextBlock FontSize="11"
+                                    Foreground="#FFCCCC"
+                                    TextWrapping="Wrap">
+                            ViperKit is NOT running with administrator privileges! Most features will FAIL. Close this application and right-click the executable, then select "Run as Administrator". Registry scans, service management, scheduled tasks, and all remediation actions require admin rights.
+                          </TextBlock>
+                        </StackPanel>
+                      </Border>
 
                       <!-- DISCLAIMER -->
                       <Border Background="#1A1A0A"
@@ -565,7 +588,8 @@
                                 FontSize="12"
                                 Foreground="#8FA9AA"
                                 TextWrapping="Wrap" />
-                    </StackPanel>
+                      </StackPanel>
+                    </ScrollViewer>
                   </Border>
                 </TabItem>
 
@@ -584,18 +608,33 @@
 
                       <!-- Description -->
                       <TextBlock Grid.Row="1"
-                                Text="Start from the process, tool, or file you killed or removed. We'll carry that forward into Persist and Sweep as the case focus."
+                                Text="Start from the suspicious file, domain, hash, or IOC you found. DON'T remove it yet - add it to the case first to document it, then we'll carry it forward as the case focus."
                                 FontSize="12"
                                 Foreground="#8FA9AA"
                                 TextWrapping="Wrap" />
 
                       <!-- IOC input + type + run -->
                       <StackPanel Grid.Row="2"
-                                  Orientation="Horizontal"
+                                  Orientation="Vertical"
                                   Spacing="8">
-                        <TextBox x:Name="HuntIocInput"
-                                Width="420"
-                                Watermark="Paste path, hash, domain, IP, registry key..." />
+
+                        <!-- Recent searches dropdown -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="Recent searches:"
+                                    FontSize="11"
+                                    Foreground="#8FA9AA"
+                                    VerticalAlignment="Center" />
+                          <ComboBox x:Name="HuntHistoryDropdown"
+                                    Width="520"
+                                    SelectionChanged="HuntHistoryDropdown_OnSelectionChanged"
+                                    PlaceholderText="Select from recent IOC searches..." />
+                        </StackPanel>
+
+                        <!-- Current IOC input row -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBox x:Name="HuntIocInput"
+                                  Width="420"
+                                  Watermark="Paste path, hash, domain, IP, registry key..." />
 
                         <ComboBox x:Name="HuntIocType"
                                   Width="170"
@@ -617,6 +656,7 @@
                                 Content="Set as case focus"
                                 Width="150"
                                 Click="HuntSetCaseFocusButton_OnClick" />
+                        </StackPanel>
                       </StackPanel>
 
                       <!-- Scope folder + Status + Buttons in one row -->
@@ -2194,10 +2234,404 @@
         <!-- HELP -->
         <TabItem Header="Help">
           <Border Background="#0B1518" Padding="16">
-            <TextBlock Text="Help tab shell — safety rules, shortcuts, and log locations."
-                       Foreground="#C7D4D4"
-                       FontSize="16"
-                       TextWrapping="Wrap" />
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+              <!-- Title -->
+              <TextBlock Grid.Row="0"
+                        Text="ViperKit Help &amp; Documentation"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        Foreground="#EAF7F7" />
+
+              <!-- Search Box -->
+              <Border Grid.Row="1" Background="#0D1517" Padding="10" CornerRadius="4">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Search Help Topics" FontSize="12" Foreground="#8FA9AA" />
+                  <TextBox x:Name="HelpSearchBox"
+                          Watermark="Type to search help topics..."
+                          TextChanged="HelpSearchBox_OnTextChanged" />
+                </StackPanel>
+              </Border>
+
+              <!-- Help Content (Scrollable) -->
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="HelpContentPanel" Spacing="16">
+
+                  <!-- SAFETY RULES -->
+                  <Border Background="#1A0A0A" BorderBrush="#4A1616" BorderThickness="2" Padding="12" CornerRadius="6">
+                    <StackPanel Spacing="8">
+                      <TextBlock Text="⚠ SAFETY RULES" FontSize="16" FontWeight="Bold" Foreground="#FF6666" />
+                      <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#FFCCCC">
+                        • ALWAYS add suspicious items to the case BEFORE removing them<LineBreak/>
+                        • ALWAYS run Hunt to find related artifacts BEFORE using Cleanup<LineBreak/>
+                        • ALWAYS preview before executing any cleanup or hardening actions<LineBreak/>
+                        • ALWAYS export a case report before making system changes<LineBreak/>
+                        • ALWAYS capture a baseline AFTER cleaning but BEFORE considering the system safe<LineBreak/>
+                        • NEVER run ViperKit on a production domain controller without approval<LineBreak/>
+                        • NEVER assume the system is clean - ViperKit is NOT an EDR or antivirus<LineBreak/>
+                        • ALWAYS monitor the system for 2-4 weeks after incident response
+                      </TextBlock>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- QUICK START -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A4A3F" BorderThickness="1">
+                    <Expander Header="Quick Start Guide" IsExpanded="True">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Recommended Workflow:</Bold><LineBreak/>
+                          <LineBreak/>
+                          <Bold>1. Start or Load Case</Bold> - Create a new case with a descriptive name or load an existing one<LineBreak/>
+                          <LineBreak/>
+                          <Bold>2. Hunt</Bold> - Enter the suspicious IOC (file, domain, hash, etc.) you FOUND (DON'T remove it yet!)<LineBreak/>
+                          → Add the IOC to the case to document your findings<LineBreak/>
+                          → Set it as "case focus" to track it across all tabs<LineBreak/>
+                          <LineBreak/>
+                          <Bold>3. Persist</Bold> - Scan for persistence mechanisms related to your focus<LineBreak/>
+                          → Check PowerShell history for attacker commands<LineBreak/>
+                          → Add suspicious items to cleanup queue<LineBreak/>
+                          <LineBreak/>
+                          <Bold>4. Sweep</Bold> - Find other artifacts installed around the same time (time clustering)<LineBreak/>
+                          → Expand your focus with related items<LineBreak/>
+                          <LineBreak/>
+                          <Bold>5. Persist (Again)</Bold> - Re-scan with expanded focus to catch everything<LineBreak/>
+                          <LineBreak/>
+                          <Bold>6. Cleanup</Bold> - Preview and execute remediation actions<LineBreak/>
+                          → Items can be undone if needed<LineBreak/>
+                          <LineBreak/>
+                          <Bold>7. Harden</Bold> - Apply security controls to prevent reinfection<LineBreak/>
+                          → Use Standard profile for most cases, Strict for high-risk environments<LineBreak/>
+                          <LineBreak/>
+                          <Bold>8. Baseline</Bold> - Capture current state for future comparison<LineBreak/>
+                          <LineBreak/>
+                          <Bold>9. Export Report</Bold> - Generate professional PDF report with recommendations
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- DASHBOARD TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Dashboard Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Case management, system overview, and baseline monitoring<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Features:</Bold><LineBreak/>
+                          • Start New Case - Begin investigation with optional custom name<LineBreak/>
+                          • Load Existing Case - Resume previous investigation<LineBreak/>
+                          • System Snapshot - View host info, OS, user<LineBreak/>
+                          • Baseline Capture - Save current persistence state for comparison<LineBreak/>
+                          • Compare to Baseline - Detect new persistence since baseline<LineBreak/>
+                          • Demo Mode - Guided walkthrough for training<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Tip:</Bold> Always capture a baseline AFTER cleaning to monitor for reinfection
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- HUNT TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Hunt Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Find and track the initial threat indicator<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Supported IOC Types:</Bold><LineBreak/>
+                          • File paths (C:\path\to\file.exe)<LineBreak/>
+                          • File hashes (MD5, SHA1, SHA256)<LineBreak/>
+                          • Domains and URLs (malicious.com)<LineBreak/>
+                          • IP addresses (192.168.1.100)<LineBreak/>
+                          • Registry keys and values<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Features:</Bold><LineBreak/>
+                          • Auto-detect IOC type or manually select<LineBreak/>
+                          • Optional scope folder for targeted file scanning<LineBreak/>
+                          • Set as case focus to highlight across all tabs<LineBreak/>
+                          <LineBreak/>
+                          <Bold>⚠ Important:</Bold> DON'T remove the suspicious item yet! Add it to the case first, run Hunt to find all related artifacts, THEN use Cleanup to remove everything.
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- PERSIST TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Persist Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Detect persistence mechanisms and analyze PowerShell history<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Scanned Locations:</Bold><LineBreak/>
+                          • Registry Run keys (HKCU/HKLM)<LineBreak/>
+                          • Startup folders (all users + current user)<LineBreak/>
+                          • Scheduled tasks<LineBreak/>
+                          • Windows services<LineBreak/>
+                          • WMI event subscriptions<LineBreak/>
+                          • Shell extensions and browser helpers<LineBreak/>
+                          <LineBreak/>
+                          <Bold>PowerShell History:</Bold><LineBreak/>
+                          • Analyzes command history for suspicious patterns<LineBreak/>
+                          • Detects encoded commands, downloads, execution bypasses<LineBreak/>
+                          • Risk-scored (HIGH/MEDIUM/LOW)<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Filters:</Bold><LineBreak/>
+                          • Show only CHECK (high-risk) items<LineBreak/>
+                          • Filter by location type (Registry, Services, Tasks)<LineBreak/>
+                          • Filter by focus match<LineBreak/>
+                          • Search text across all fields<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Tip:</Bold> CHECK items are highest priority - investigate these first
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- SWEEP TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Sweep Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Find related artifacts through time and folder clustering<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Clustering Methods:</Bold><LineBreak/>
+                          • <Bold>Time Clustering:</Bold> Files/services created within ±1-8 hours of focus target<LineBreak/>
+                          • <Bold>Folder Clustering:</Bold> Items in same directory tree as focus target<LineBreak/>
+                          • <Bold>Direct Match:</Bold> Items matching focus target name/path<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Scanned Locations:</Bold><LineBreak/>
+                          • Desktop (all users)<LineBreak/>
+                          • Downloads<LineBreak/>
+                          • Temp folders<LineBreak/>
+                          • AppData<LineBreak/>
+                          • Recent items<LineBreak/>
+                          • Services and drivers<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Tip:</Bold> Malware often drops multiple files at once - time clustering catches them
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- CLEANUP TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Cleanup Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Safe remediation with rollback capability<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Supported Actions:</Bold><LineBreak/>
+                          • Delete files<LineBreak/>
+                          • Remove registry keys/values<LineBreak/>
+                          • Stop and disable services<LineBreak/>
+                          • Delete scheduled tasks<LineBreak/>
+                          • Remove WMI subscriptions<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Safety Features:</Bold><LineBreak/>
+                          • Preview all actions before executing<LineBreak/>
+                          • Cleanup journal tracks all changes<LineBreak/>
+                          • Undo capability for reversible actions<LineBreak/>
+                          • Export case report before cleanup (recommended)<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Workflow:</Bold><LineBreak/>
+                          1. Review items in queue<LineBreak/>
+                          2. Export case report (CRITICAL)<LineBreak/>
+                          3. Preview cleanup actions<LineBreak/>
+                          4. Execute cleanup<LineBreak/>
+                          5. Verify results<LineBreak/>
+                          6. Undo if needed<LineBreak/>
+                          <LineBreak/>
+                          <Bold>⚠ Warning:</Bold> File deletions cannot be undone - export report first!
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- HARDEN TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Harden Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Apply security controls to prevent reinfection<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Profiles:</Bold><LineBreak/>
+                          • <Bold>Standard:</Bold> Balanced security for most environments<LineBreak/>
+                          • <Bold>Strict:</Bold> Maximum security, may impact compatibility<LineBreak/>
+                          • <Bold>Custom:</Bold> Manually select individual actions<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Categories:</Bold><LineBreak/>
+                          • Script Execution - Block WSH, restrict PowerShell<LineBreak/>
+                          • Firewall - Enable Windows Firewall, block inbound<LineBreak/>
+                          • Defender - Enable real-time protection, cloud delivery<LineBreak/>
+                          • AutoRun - Disable autoplay/autorun for removable media<LineBreak/>
+                          • Remote Access - Restrict RDP, disable RemoteRegistry<LineBreak/>
+                          • Office - Enable macro protections<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Rollback:</Bold><LineBreak/>
+                          • All actions are journaled and can be rolled back<LineBreak/>
+                          • Rollback Last - Undo most recent action<LineBreak/>
+                          • Rollback All - Undo all hardening for this case<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Tip:</Bold> Blue items are already hardened, green items were applied by you
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- CASE TAB -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Case Tab">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Purpose:</Bold> Timeline tracking and professional reporting<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Features:</Bold><LineBreak/>
+                          • Full timeline of all case events<LineBreak/>
+                          • Focus target management<LineBreak/>
+                          • PDF report export with recommendations<LineBreak/>
+                          <LineBreak/>
+                          <Bold>PDF Report Includes:</Bold><LineBreak/>
+                          • Executive summary with risk breakdown<LineBreak/>
+                          • Critical next steps (password resets, monitoring, etc.)<LineBreak/>
+                          • Scans performed with findings<LineBreak/>
+                          • Top high-risk findings<LineBreak/>
+                          • Remediation actions taken<LineBreak/>
+                          • Hardening applied<LineBreak/>
+                          • Baseline info<LineBreak/>
+                          • Timeline of key events<LineBreak/>
+                          <LineBreak/>
+                          <Bold>File Location:</Bold> Documents\ViperKit\Reports\
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- FILE LOCATIONS -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="File Locations">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4" FontFamily="Consolas">
+                          <Bold>ViperKit Data Locations:</Bold><LineBreak/>
+                          <LineBreak/>
+                          Cases:<LineBreak/>
+                          C:\ProgramData\ViperKit\Cases\{CaseID}\case.json<LineBreak/>
+                          <LineBreak/>
+                          Case Exports (TXT):<LineBreak/>
+                          C:\ProgramData\ViperKit\Cases\{CaseID}\case_export.txt<LineBreak/>
+                          <LineBreak/>
+                          PDF Reports:<LineBreak/>
+                          C:\Users\{User}\Documents\ViperKit\Reports\*.pdf<LineBreak/>
+                          <LineBreak/>
+                          Cleanup Journals:<LineBreak/>
+                          C:\ProgramData\ViperKit\CleanupJournals\{CaseID}_cleanup.json<LineBreak/>
+                          <LineBreak/>
+                          Harden Journals:<LineBreak/>
+                          C:\ProgramData\ViperKit\HardenJournals\{CaseID}_harden.json<LineBreak/>
+                          <LineBreak/>
+                          Baselines:<LineBreak/>
+                          Stored in case.json within Cases folder
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- TIPS & BEST PRACTICES -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Tips &amp; Best Practices">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>General Tips:</Bold><LineBreak/>
+                          • Use descriptive case names (e.g., "Ticket-12345" or "Ransomware-2024-11")<LineBreak/>
+                          • Export PDF report BEFORE making any changes<LineBreak/>
+                          • Take screenshots of critical findings<LineBreak/>
+                          • Document your reasoning in case notes<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Investigation Tips:</Bold><LineBreak/>
+                          • Start broad, narrow down with focus<LineBreak/>
+                          • Run Persist scan multiple times as you expand focus<LineBreak/>
+                          • Check PowerShell history even if nothing obvious in Persist<LineBreak/>
+                          • Sweep finds things Hunt might miss<LineBreak/>
+                          • Look for time clusters within ±1-2 hours for precision<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Cleanup Tips:</Bold><LineBreak/>
+                          • Review EVERY item in cleanup queue before executing<LineBreak/>
+                          • Export case report first (can't undo file deletions)<LineBreak/>
+                          • Test on a non-critical system first if unsure<LineBreak/>
+                          • Consider creating a system restore point<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Post-Cleanup Tips:</Bold><LineBreak/>
+                          • Capture baseline immediately after cleanup<LineBreak/>
+                          • Re-scan daily for first week<LineBreak/>
+                          • Compare to baseline weekly for 2-4 weeks<LineBreak/>
+                          • Reset ALL passwords (see PDF report recommendations)<LineBreak/>
+                          • Deploy proper EDR/antivirus if not present<LineBreak/>
+                          <LineBreak/>
+                          <Bold>When to Reimage:</Bold><LineBreak/>
+                          • Attacker had domain admin access<LineBreak/>
+                          • Ransomware encryption occurred<LineBreak/>
+                          • Rootkit or bootkit suspected<LineBreak/>
+                          • Multiple reinfections after cleanup<LineBreak/>
+                          • Critical server or domain controller compromised
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- FAQ -->
+                  <Border Background="#050E10" Padding="12" CornerRadius="6" BorderBrush="#1A3C3F" BorderThickness="1">
+                    <Expander Header="Frequently Asked Questions">
+                      <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C7D4D4">
+                          <Bold>Q: Does ViperKit need to run as Administrator?</Bold><LineBreak/>
+                          A: YES. ViperKit REQUIRES administrator privileges to access registry, services, scheduled tasks, system files, and perform remediation actions. Right-click and "Run as Administrator".<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: Can I use ViperKit instead of antivirus?</Bold><LineBreak/>
+                          A: NO. ViperKit is for incident response, not ongoing protection. Deploy proper EDR/AV.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: Will cleanup break my system?</Bold><LineBreak/>
+                          A: Preview all actions first. Avoid deleting system files. Export report before cleanup.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: How do I know if I got everything?</Bold><LineBreak/>
+                          A: You don't. Capture baseline, monitor for 2-4 weeks, compare regularly. Consider reimaging.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: What if I accidentally deleted something important?</Bold><LineBreak/>
+                          A: Cleanup journal shows what was deleted. File deletions cannot be undone. Restore from backup.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: Can I run this on a domain controller?</Bold><LineBreak/>
+                          A: Only with approval. Test hardening profile impact first. Consider replication delays.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: How often should I capture baselines?</Bold><LineBreak/>
+                          A: Once immediately after cleanup, then monthly for ongoing monitoring.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: What does "NEW" badge mean in Persist tab?</Bold><LineBreak/>
+                          A: Item was added since last baseline capture - potential reinfection indicator.<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: Should I use Standard or Strict hardening?</Bold><LineBreak/>
+                          A: Standard for most cases. Strict for high-risk environments (may break some apps).<LineBreak/>
+                          <LineBreak/>
+                          <Bold>Q: Where are my reports saved?</Bold><LineBreak/>
+                          A: PDF: Documents\ViperKit\Reports\, Case data: C:\ProgramData\ViperKit\Cases\
+                        </TextBlock>
+                      </StackPanel>
+                    </Expander>
+                  </Border>
+
+                  <!-- VERSION INFO -->
+                  <Border Background="#0A1518" Padding="10" CornerRadius="4" BorderBrush="#1A3A3F" BorderThickness="1">
+                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#8FA9AA" TextAlignment="Center">
+                      ViperKit v1.0 | Incident Response Toolkit<LineBreak/>
+                      Open Source Project: https://github.com/jtarkington77/Viperkit<LineBreak/>
+                      Report issues or feature requests on GitHub - Use at your own risk<LineBreak/>
+                      No warranty or guarantee of issue resolution - Not responsible for any damages<LineBreak/>
+                      Always verify findings and maintain backups before remediation
+                    </TextBlock>
+                  </Border>
+
+                </StackPanel>
+              </ScrollViewer>
+
+            </Grid>
           </Border>
         </TabItem>
 

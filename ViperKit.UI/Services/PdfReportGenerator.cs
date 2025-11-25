@@ -99,6 +99,9 @@ namespace ViperKit.UI.Services
                 // Executive Summary
                 column.Item().Element(c => ComposeExecutiveSummary(c, report));
 
+                // Critical Recommendations (additional hardening beyond what the tool does)
+                column.Item().PaddingTop(15).Element(c => ComposeRecommendations(c, report));
+
                 // Focus Targets
                 if (report.FocusTargets.Count > 0)
                     column.Item().PaddingTop(15).Element(c => ComposeFocusTargets(c, report));
@@ -125,6 +128,132 @@ namespace ViperKit.UI.Services
                 // Timeline
                 if (report.KeyEvents.Count > 0)
                     column.Item().PaddingTop(15).Element(c => ComposeTimeline(c, report));
+            });
+        }
+
+        private static void ComposeRecommendations(IContainer container, CaseReport report)
+        {
+            container.Column(column =>
+            {
+                column.Item().Text("CRITICAL NEXT STEPS").FontSize(14).Bold().FontColor("#CC0000");
+                column.Item().PaddingTop(5).LineHorizontal(1).LineColor("#CC0000");
+
+                column.Item().PaddingTop(10).Background("#FFF5F5").Border(2).BorderColor("#CC0000").Padding(12).Column(col =>
+                {
+                    col.Item().Text("The following steps CANNOT be automated and MUST be performed manually:")
+                        .FontSize(10).Bold().FontColor("#CC0000");
+
+                    col.Item().PaddingTop(10).Column(steps =>
+                    {
+                        // Step 1: Password Reset
+                        steps.Item().PaddingTop(8).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("1.").FontSize(10).Bold();
+                                row.RelativeItem().Text("RESET ALL PASSWORDS").FontSize(10).Bold().FontColor("#CC0000");
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Local administrator password").FontSize(9);
+                                details.Item().Text("• All user account passwords on this machine").FontSize(9);
+                                details.Item().Text("• Domain passwords if domain credentials may have been compromised").FontSize(9);
+                                details.Item().Text("• Any service account passwords used on this system").FontSize(9);
+                            });
+                        });
+
+                        // Step 2: Review Authentication
+                        steps.Item().PaddingTop(10).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("2.").FontSize(10).Bold();
+                                row.RelativeItem().Text("REVIEW AUTHENTICATION & ACCESS").FontSize(10).Bold();
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Check for unauthorized user accounts or group memberships").FontSize(9);
+                                details.Item().Text("• Review local administrators and remote access permissions").FontSize(9);
+                                details.Item().Text("• Audit Active Directory for suspicious changes (if domain-joined)").FontSize(9);
+                                details.Item().Text("• Review and rotate any stored credentials or API keys").FontSize(9);
+                            });
+                        });
+
+                        // Step 3: Network Security
+                        steps.Item().PaddingTop(10).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("3.").FontSize(10).Bold();
+                                row.RelativeItem().Text("VERIFY NETWORK SECURITY").FontSize(10).Bold();
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Check firewall rules for unauthorized remote access (RDP, WinRM, etc.)").FontSize(9);
+                                details.Item().Text("• Review open ports and listening services").FontSize(9);
+                                details.Item().Text("• Verify VPN configurations if applicable").FontSize(9);
+                                details.Item().Text("• Check for unauthorized network shares").FontSize(9);
+                            });
+                        });
+
+                        // Step 4: Monitoring
+                        steps.Item().PaddingTop(10).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("4.").FontSize(10).Bold();
+                                row.RelativeItem().Text("ENABLE MONITORING & LOGGING").FontSize(10).Bold();
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Enable Windows Event Log auditing (if not already enabled)").FontSize(9);
+                                details.Item().Text("• Deploy EDR/antivirus if not present (ViperKit is NOT a replacement)").FontSize(9);
+                                details.Item().Text("• Schedule regular baseline comparisons using ViperKit").FontSize(9);
+                                details.Item().Text("• Monitor for new persistence mechanisms daily for 2-4 weeks").FontSize(9);
+                            });
+                        });
+
+                        // Step 5: Patch Management
+                        steps.Item().PaddingTop(10).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("5.").FontSize(10).Bold();
+                                row.RelativeItem().Text("APPLY SECURITY UPDATES").FontSize(10).Bold();
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Install all pending Windows security updates").FontSize(9);
+                                details.Item().Text("• Update all installed applications to latest versions").FontSize(9);
+                                details.Item().Text("• Review and remove unnecessary software").FontSize(9);
+                            });
+                        });
+
+                        // Step 6: Documentation
+                        steps.Item().PaddingTop(10).Column(step =>
+                        {
+                            step.Item().Row(row =>
+                            {
+                                row.ConstantItem(20).Text("6.").FontSize(10).Bold();
+                                row.RelativeItem().Text("DOCUMENT & REPORT").FontSize(10).Bold();
+                            });
+                            step.Item().PaddingLeft(20).PaddingTop(4).Column(details =>
+                            {
+                                details.Item().Text("• Preserve this report and all ViperKit logs for records").FontSize(9);
+                                details.Item().Text("• Report incident to management/security team").FontSize(9);
+                                details.Item().Text("• Consider reporting to relevant authorities if applicable").FontSize(9);
+                            });
+                        });
+                    });
+
+                    // Warning footer
+                    col.Item().PaddingTop(12).Border(1).BorderColor("#FF9999").Background("#FFEEEE").Padding(8).Column(warn =>
+                    {
+                        warn.Item().Text("⚠ IMPORTANT").FontSize(10).Bold().FontColor("#CC0000");
+                        warn.Item().PaddingTop(4).Text("Do not assume the system is clean until all steps above are completed and the system has been monitored for at least 2 weeks without suspicious activity. Consider reimaging if the compromise was severe or if attacker had domain admin access.")
+                            .FontSize(9).Italic();
+                    });
+                });
             });
         }
 

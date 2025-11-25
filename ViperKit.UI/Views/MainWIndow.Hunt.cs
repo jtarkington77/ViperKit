@@ -26,6 +26,11 @@ public partial class MainWindow
         Timeout = TimeSpan.FromSeconds(3)
     };
     private readonly List<HuntResult> _huntResults = new();
+    private readonly List<string> _huntHistory = new();
+    private const int MaxHuntHistory = 10;
+    private static readonly string HuntHistoryFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "ViperKit", "hunt_history.txt");
 
 
     // =========================
@@ -64,6 +69,9 @@ public partial class MainWindow
 
             // Log the action (file, json, case)
             LogHuntAction(iocText, effectiveType);
+
+            // Add to hunt history
+            AddToHuntHistory(iocText);
 
             var timestamp = DateTime.Now.ToString("HH:mm:ss");
             if (HuntStatusText != null)
@@ -1815,5 +1823,83 @@ public partial class MainWindow
         }
 
         return false;
+    }
+
+    // =========================
+    // HUNT HISTORY MANAGEMENT
+    // =========================
+
+    private void LoadHuntHistory()
+    {
+        try
+        {
+            if (File.Exists(HuntHistoryFile))
+            {
+                var lines = File.ReadAllLines(HuntHistoryFile);
+                _huntHistory.Clear();
+                _huntHistory.AddRange(lines.Take(MaxHuntHistory));
+                RefreshHuntHistoryDropdown();
+            }
+        }
+        catch
+        {
+            // Ignore errors loading history
+        }
+    }
+
+    private void SaveHuntHistory()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(HuntHistoryFile)!);
+            File.WriteAllLines(HuntHistoryFile, _huntHistory);
+        }
+        catch
+        {
+            // Ignore errors saving history
+        }
+    }
+
+    private void AddToHuntHistory(string ioc)
+    {
+        if (string.IsNullOrWhiteSpace(ioc))
+            return;
+
+        // Remove if already exists (move to top)
+        _huntHistory.Remove(ioc);
+
+        // Add to beginning
+        _huntHistory.Insert(0, ioc);
+
+        // Keep only last 10
+        while (_huntHistory.Count > MaxHuntHistory)
+        {
+            _huntHistory.RemoveAt(_huntHistory.Count - 1);
+        }
+
+        SaveHuntHistory();
+        RefreshHuntHistoryDropdown();
+    }
+
+    private void RefreshHuntHistoryDropdown()
+    {
+        if (HuntHistoryDropdown == null)
+            return;
+
+        HuntHistoryDropdown.Items.Clear();
+        foreach (var item in _huntHistory)
+        {
+            HuntHistoryDropdown.Items.Add(item);
+        }
+    }
+
+    private void HuntHistoryDropdown_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (HuntHistoryDropdown?.SelectedItem is string selectedIoc && HuntIocInput != null)
+        {
+            HuntIocInput.Text = selectedIoc;
+            // Clear selection so user can select same item again
+            HuntHistoryDropdown.SelectedItem = null;
+        }
     }
 }
