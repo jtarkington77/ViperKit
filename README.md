@@ -9,7 +9,7 @@
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)]()
 [![License](https://img.shields.io/badge/License-Proprietary-red)]()
-[![GitHub](https://img.shields.io/badge/GitHub-VenomousViper-00FFF8?logo=github)](https://github.com/jtarkington77/VenomousViper)
+[![GitHub](https://img.shields.io/badge/GitHub-ViperKit-00FFF8?logo=github)](https://github.com/jtarkington77/ViperKit)
 
 </div>
 
@@ -425,7 +425,7 @@ Output: `ViperKit.UI\bin\Release\net9.0\win-x64\publish\ViperKit.UI.exe`
 This is an open-source project. Contributions are welcome!
 
 ### Reporting Issues
-- Report bugs and feature requests on [GitHub Issues](https://github.com/jtarkington77/VenomousViper/issues)
+- Report bugs and feature requests on [GitHub Issues](https://github.com/jtarkington77/ViperKit/issues)
 - Use at your own risk - no warranty or guarantee of issue resolution
 
 ### Development
@@ -495,8 +495,8 @@ This is an open-source project provided AS-IS for educational and professional u
 
 ## Support & Contact
 
-- **GitHub**: [VenomousViper](https://github.com/jtarkington77/VenomousViper)
-- **Issues**: [Report bugs and request features](https://github.com/jtarkington77/VenomousViper/issues)
+- **GitHub**: [VenomousViper](https://github.com/jtarkington77/ViperKit)
+- **Issues**: [Report bugs and request features](https://github.com/jtarkington77/ViperKit/issues)
 - **Disclaimer**: Use at your own risk - no warranty or guarantee of support
 
 ---
@@ -519,6 +519,6 @@ Built for MSPs, IT teams, and security professionals who need portable incident 
 
 **⚠️ Never assume system is clean - monitor for 2-4 weeks**
 
-[Download Latest Release](https://github.com/jtarkington77/VenomousViper/releases) | [Documentation](docs/) | [Report Issue](https://github.com/jtarkington77/VenomousViper/issues)
+[Download Latest Release](https://github.com/jtarkington77/ViperKit/releases) | [Documentation](docs/) | [Report Issue](https://github.com/jtarkington77/ViperKit/issues)
 
 </div>
