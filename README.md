@@ -460,14 +460,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines (coming soon).
 ## Planned Features
 
 ### Near-term
-- ✅ Hunt history dropdown - **DONE**
-- ✅ Confirmation dialogs - **DONE**
-- ✅ PDF report generation - **DONE**
-- ⏳ PowerShell history analysis
-- ⏳ Harden tab (security profiles)
-
-### Future
-- Demo mode (training walkthrough)
 - Enhanced HTML reports
 - Artifacts ZIP export
 - Baseline monitoring dashboard
@@ -487,7 +479,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines (coming soon).
 
 ## License
 
-**Proprietary License** - VENOMOUSVIPER / Jeremy Tarkington
+**Proprietary License** - ViperKit / Jeremy Tarkington
 
 This is an open-source project provided AS-IS for educational and professional use. See disclaimer at top.
 
