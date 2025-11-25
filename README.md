@@ -487,7 +487,7 @@ This is an open-source project provided AS-IS for educational and professional u
 
 ## Support & Contact
 
-- **GitHub**: [VenomousViper](https://github.com/jtarkington77/ViperKit)
+- **GitHub**: [ViperKit](https://github.com/jtarkington77/ViperKit)
 - **Issues**: [Report bugs and request features](https://github.com/jtarkington77/ViperKit/issues)
 - **Disclaimer**: Use at your own risk - no warranty or guarantee of support
 
@@ -497,7 +497,7 @@ This is an open-source project provided AS-IS for educational and professional u
 
 Built for MSPs, IT teams, and security professionals who need portable incident response tools.
 
-**VENOMOUSVIPER** - Professional cybersecurity tooling
+**ViperKit** - Professional cybersecurity tooling
 
 ---
 
