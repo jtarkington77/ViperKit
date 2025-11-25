@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -384,16 +387,137 @@ public partial class MainWindow : Window
     {
         try
         {
-            string path = CaseManager.ExportToFile();
+            // Generate structured report data
+            var report = CaseManager.GenerateReport();
+
+            // Populate findings from current scan data (if available)
+            PopulateReportFindings(report);
+
+            // Generate PDF
+            string folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "ViperKit", "Reports");
+            Directory.CreateDirectory(folder);
+
+            string filename = $"ViperKit_Report_{CaseManager.CaseId}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            string path = Path.Combine(folder, filename);
+
+            ViperKit.UI.Services.PdfReportGenerator.GenerateReport(report, path);
+
+            // Also save the old text export for compatibility
+            CaseManager.ExportToFile();
 
             if (DashboardStatusText != null)
-                DashboardStatusText.Text = $"Status: case exported to {path}";
+                DashboardStatusText.Text = $"Status: PDF report exported to {path}";
+
+            // Open the folder containing the report
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // Ignore if can't open folder
+            }
         }
         catch (Exception ex)
         {
             if (DashboardStatusText != null)
-                DashboardStatusText.Text = $"Status: error exporting case – {ex.Message}";
+                DashboardStatusText.Text = $"Status: error exporting report – {ex.Message}";
         }
+    }
+
+    private void PopulateReportFindings(CaseReport report)
+    {
+        try
+        {
+            // Get persist findings from current scan
+            var persistItems = GetCurrentPersistItems();
+            if (persistItems.Count > 0)
+            {
+                report.Findings.PersistenceTotal = persistItems.Count;
+                report.Findings.PersistenceCheck = persistItems.Count(p =>
+                    p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase));
+                report.Findings.PersistenceNote = persistItems.Count(p =>
+                    p.Risk.StartsWith("NOTE", StringComparison.OrdinalIgnoreCase));
+                report.Findings.PersistenceOk = persistItems.Count(p =>
+                    p.Risk.StartsWith("OK", StringComparison.OrdinalIgnoreCase));
+
+                // Top 10 high-risk findings
+                report.Findings.TopPersistenceFindings = persistItems
+                    .Where(p => p.Risk.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
+                    .Take(10)
+                    .Select(p => $"{p.Name} - {p.Path ?? p.RegistryPath}")
+                    .ToList();
+            }
+
+            // Get sweep findings from current results
+            var sweepItems = GetCurrentSweepItems();
+            if (sweepItems.Count > 0)
+            {
+                report.Findings.SweepTotal = sweepItems.Count;
+                report.Findings.SweepSuspicious = sweepItems.Count(s =>
+                    s.Severity == "HIGH" || s.Severity == "MEDIUM" || s.IsFocusHit);
+
+                report.Findings.TopSweepFindings = sweepItems
+                    .Where(s => s.Severity == "HIGH" || s.IsFocusHit)
+                    .Take(10)
+                    .Select(s => s.Modified.HasValue
+                        ? $"{s.Name} ({s.Modified.Value:yyyy-MM-dd}) - {s.Path}"
+                        : $"{s.Name} - {s.Path}")
+                    .ToList();
+            }
+
+            // Get hunt results if available
+            var huntResults = GetCurrentHuntResults();
+            if (huntResults.Count > 0)
+            {
+                report.Findings.HuntMatches = huntResults.Count;
+                report.Findings.HuntTargets = huntResults
+                    .Take(10)
+                    .Select(h => $"{h.Summary} - {h.Target}")
+                    .ToList();
+            }
+
+            // Get PowerShell history if available
+            var psHistory = GetCurrentPowerShellHistory();
+            if (psHistory.Count > 0)
+            {
+                report.Findings.PowerShellCommandsAnalyzed = psHistory.Count;
+                report.Findings.PowerShellHighRisk = psHistory.Count(p =>
+                    p.Severity == "HIGH");
+
+                report.Findings.TopPowerShellCommands = psHistory
+                    .Where(p => p.Severity == "HIGH")
+                    .Take(5)
+                    .Select(p => p.Command)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Don't fail export if we can't populate findings
+        }
+    }
+
+    // Helper methods to get current scan results (these will be in the partial classes)
+    private List<SweepEntry> GetCurrentSweepItems()
+    {
+        return _sweepEntries?.ToList() ?? new List<SweepEntry>();
+    }
+
+    private List<HuntResult> GetCurrentHuntResults()
+    {
+        return _huntResults?.ToList() ?? new List<HuntResult>();
+    }
+
+    private List<PowerShellHistoryEntry> GetCurrentPowerShellHistory()
+    {
+        return _psHistoryFiltered?.ToList() ?? new List<PowerShellHistoryEntry>();
     }
 
     private void CaseFocusSetButton_OnClick(object? sender, RoutedEventArgs e)

@@ -572,149 +572,160 @@
                 <!-- HUNT -->
                 <TabItem Header="Hunt">
                   <Border Background="#0B1518" Padding="16">
-                    <StackPanel Orientation="Vertical" Spacing="8">
+                    <!-- Use Grid for proper layout control with scrolling -->
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" RowSpacing="8">
 
-                            <TextBlock Text="Step 1 – Hunt the thing you stopped"
-                                        FontSize="16"
-                                        FontWeight="SemiBold"
-                                        Foreground="#EAF7F7"
-                                        Margin="0,0,0,4" />
+                      <!-- Title -->
+                      <TextBlock Grid.Row="0"
+                                Text="Step 1 – Hunt the thing you stopped"
+                                FontSize="16"
+                                FontWeight="SemiBold"
+                                Foreground="#EAF7F7" />
 
-                              <TextBlock Text="Start from the process, tool, or file you killed or removed. We’ll carry that forward into Persist and Sweep as the case focus."
-                                        FontSize="12"
-                                        Foreground="#8FA9AA"
-                                        TextWrapping="Wrap"
-                                        Margin="0,0,0,8" />
-                      <!-- 5-row grid: IOC, status, scope, buttons, text results -->
-                      <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
+                      <!-- Description -->
+                      <TextBlock Grid.Row="1"
+                                Text="Start from the process, tool, or file you killed or removed. We'll carry that forward into Persist and Sweep as the case focus."
+                                FontSize="12"
+                                Foreground="#8FA9AA"
+                                TextWrapping="Wrap" />
 
-                              <!-- IOC input + type + run -->
-                              <StackPanel Grid.Row="0"
-                                          Orientation="Horizontal"
-                                          Spacing="8">
-                                <TextBox x:Name="HuntIocInput"
-                                        Width="420"
-                                        Watermark="Paste path, hash, domain, IP, registry key..." />
+                      <!-- IOC input + type + run -->
+                      <StackPanel Grid.Row="2"
+                                  Orientation="Horizontal"
+                                  Spacing="8">
+                        <TextBox x:Name="HuntIocInput"
+                                Width="420"
+                                Watermark="Paste path, hash, domain, IP, registry key..." />
 
-                                <ComboBox x:Name="HuntIocType"
-                                          Width="170"
-                                          SelectedIndex="0">
-                                  <ComboBoxItem Content="Auto"      />
-                                  <ComboBoxItem Content="File path" />
-                                  <ComboBoxItem Content="Hash"      />
-                                  <ComboBoxItem Content="Domain/URL"/>
-                                  <ComboBoxItem Content="IP address"/>
-                                  <ComboBoxItem Content="Registry"  />
-                                </ComboBox>
+                        <ComboBox x:Name="HuntIocType"
+                                  Width="170"
+                                  SelectedIndex="0">
+                          <ComboBoxItem Content="Auto"      />
+                          <ComboBoxItem Content="File path" />
+                          <ComboBoxItem Content="Hash"      />
+                          <ComboBoxItem Content="Domain/URL"/>
+                          <ComboBoxItem Content="IP address"/>
+                          <ComboBoxItem Content="Registry"  />
+                        </ComboBox>
 
-                                <Button x:Name="HuntRunButton"
-                                        Content="Run Hunt"
-                                        Width="110"
-                                        Click="HuntRunButton_OnClick" />
+                        <Button x:Name="HuntRunButton"
+                                Content="Run Hunt"
+                                Width="110"
+                                Click="HuntRunButton_OnClick" />
 
-                                <!-- push this IOC into case focus -->
-                                <Button x:Name="HuntSetCaseFocusButton"
-                                        Content="Set as case focus"
-                                        Width="150"
-                                        Click="HuntSetCaseFocusButton_OnClick" />
-                              </StackPanel>
-                              
+                        <Button x:Name="HuntSetCaseFocusButton"
+                                Content="Set as case focus"
+                                Width="150"
+                                Click="HuntSetCaseFocusButton_OnClick" />
+                      </StackPanel>
+
+                      <!-- Scope folder + Status + Buttons in one row -->
+                      <Grid Grid.Row="3" ColumnDefinitions="*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                         <!-- Status line -->
-                        <TextBlock x:Name="HuntStatusText"
-                                   Grid.Row="1"
-                                   Text="Status: idle."
-                                   Foreground="#C7D4D4" />
+                        <TextBlock Grid.Row="0"
+                                  x:Name="HuntStatusText"
+                                  Text="Status: idle."
+                                  Foreground="#C7D4D4" />
 
                         <!-- Scope folder row -->
-                        <StackPanel Grid.Row="2"
+                        <StackPanel Grid.Row="1"
                                     Orientation="Horizontal"
                                     Spacing="8">
                           <TextBlock Text="Scope folder:"
-                                     VerticalAlignment="Center"
-                                     Foreground="#C7D4D4" />
+                                    VerticalAlignment="Center"
+                                    Foreground="#C7D4D4" />
                           <TextBox x:Name="HuntScopeFolderInput"
-                                   Width="420"
-                                   Watermark="Optional: folder to scan for matching files" />
+                                  Width="420"
+                                  Watermark="Optional: folder to scan for matching files" />
                           <Button x:Name="HuntBrowseScopeButton"
                                   Content="Browse..."
                                   Width="100"
                                   Click="HuntBrowseScopeButton_OnClick" />
                         </StackPanel>
 
-                        <!-- Action buttons under status -->
-                        <StackPanel Grid.Row="3"
+                        <!-- Action buttons -->
+                        <StackPanel Grid.Row="2"
                                     Orientation="Horizontal"
                                     Spacing="8">
                           <Button x:Name="HuntCopyResultsButton"
                                   Content="Copy Results"
                                   Width="120"
                                   Click="HuntCopyResultsButton_OnClick" />
-
                           <Button x:Name="HuntSaveResultsButton"
                                   Content="Save Snapshot"
                                   Width="130"
                                   Click="HuntSaveResultsButton_OnClick" />
-
                           <Button x:Name="HuntClearButton"
                                   Content="Clear"
                                   Width="80"
                                   Click="HuntClearButton_OnClick" />
-                        </StackPanel>         
-
-                        <!-- Text results area -->
-                        <TextBox x:Name="HuntResultsText"
-                                 Grid.Row="4"
-                                 AcceptsReturn="True"
-                                 IsReadOnly="True"
-                                 TextWrapping="Wrap"
-                                 FontFamily="Consolas"
-                                 Background="#05090A"
-                                 Foreground="#E4F3F3" />
+                        </StackPanel>
                       </Grid>
 
-                      <!-- Structured results list -->
-                      <Border Margin="0,8,0,0"
+                      <!-- Text results area -->
+                      <TextBox Grid.Row="4"
+                              x:Name="HuntResultsText"
+                              AcceptsReturn="True"
+                              IsReadOnly="True"
+                              TextWrapping="Wrap"
+                              FontFamily="Consolas"
+                              Background="#05090A"
+                              Foreground="#E4F3F3"
+                              MinHeight="100"
+                              MaxHeight="200" />
+
+                      <!-- Structured results list with ScrollViewer -->
+                      <Border Grid.Row="5"
                               Background="#050E10"
                               Padding="8">
-                        <StackPanel Spacing="8">
+                        <Grid RowDefinitions="Auto,*,Auto">
+                          <TextBlock Grid.Row="0"
+                                    Text="Matches"
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="#EAF7F7"
+                                    Margin="0,0,0,8" />
 
-                          <TextBlock Text="Matches"
-                                     FontSize="14"
-                                     FontWeight="SemiBold"
-                                     Foreground="#EAF7F7" />
+                          <!-- ListBox with proper scrolling -->
+                          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ListBox x:Name="HuntResultsList"
+                                    BorderThickness="0"
+                                    Background="Transparent">
+                              <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:HuntResult">
+                                  <Border Margin="0,4,0,4"
+                                          Padding="6"
+                                          Background="#07161A"
+                                          CornerRadius="4">
+                                    <StackPanel Spacing="2">
+                                      <TextBlock>
+                                        <Run Text="[" />
+                                        <Run Text="{Binding Category}" />
+                                        <Run Text="] " />
+                                        <Run Text="{Binding Severity}" />
+                                        <Run Text=" – " />
+                                        <Run Text="{Binding Summary}" />
+                                      </TextBlock>
+                                      <TextBlock Text="{Binding Target}"
+                                                FontSize="11"
+                                                Foreground="#9FB9BA"
+                                                TextWrapping="Wrap" />
+                                      <TextBlock Text="{Binding Details}"
+                                                FontSize="11"
+                                                Foreground="#7FA3A4"
+                                                TextWrapping="Wrap" />
+                                    </StackPanel>
+                                  </Border>
+                                </DataTemplate>
+                              </ListBox.ItemTemplate>
+                            </ListBox>
+                          </ScrollViewer>
 
-                          <ListBox x:Name="HuntResultsList"
-                                   BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                              <DataTemplate x:DataType="models:HuntResult">
-                                <Border Margin="0,4,0,4"
-                                        Padding="6"
-                                        Background="#07161A"
-                                        CornerRadius="4">
-                                  <StackPanel Spacing="2">
-                                    <TextBlock>
-                                      <Run Text="[" />
-                                      <Run Text="{Binding Category}" />
-                                      <Run Text="] " />
-                                      <Run Text="{Binding Severity}" />
-                                      <Run Text=" – " />
-                                      <Run Text="{Binding Summary}" />
-                                    </TextBlock>
-                                    <TextBlock Text="{Binding Target}"
-                                               FontSize="11"
-                                               Foreground="#9FB9BA"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Details}"
-                                               FontSize="11"
-                                               Foreground="#7FA3A4"
-                                               TextWrapping="Wrap" />
-                                  </StackPanel>
-                                </Border>
-                              </DataTemplate>
-                            </ListBox.ItemTemplate>
-                          </ListBox>
-
-                          <StackPanel Orientation="Horizontal" Spacing="8">
+                          <!-- Buttons at bottom -->
+                          <StackPanel Grid.Row="2"
+                                      Orientation="Horizontal"
+                                      Spacing="8"
+                                      Margin="0,8,0,0">
                             <Button Content="Open location"
                                     Width="120"
                                     Click="HuntOpenLocationButton_OnClick" />
@@ -722,11 +733,10 @@
                                     Width="120"
                                     Click="HuntCopyTargetButton_OnClick" />
                           </StackPanel>
-
-                        </StackPanel>
+                        </Grid>
                       </Border>
 
-                    </StackPanel>
+                    </Grid>
                   </Border>
                 </TabItem>
 

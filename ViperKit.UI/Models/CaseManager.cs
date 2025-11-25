@@ -275,6 +275,136 @@ public static class CaseManager
         return string.IsNullOrEmpty(CaseName) ? CaseId : $"{CaseName} ({CaseId})";
     }
 
+    /// <summary>
+    /// Generate a structured report for PDF export.
+    /// </summary>
+    public static CaseReport GenerateReport()
+    {
+        lock (_lock)
+        {
+            var report = new CaseReport
+            {
+                CaseId = CaseId,
+                CaseName = CaseName,
+                HostName = HostName,
+                UserName = UserName,
+                OsDescription = OsDescription,
+                CaseStarted = StartedAt,
+                ReportGenerated = DateTime.Now,
+                InvestigatorName = Environment.UserName,
+                FocusTargets = _focusTargets.ToList(),
+                Findings = new FindingsSummary()
+            };
+
+            // Extract scan summaries from events
+            var scanEvents = _events.Where(e =>
+                e.Action.Contains("scan", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("completed", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var evt in scanEvents)
+            {
+                var scan = new ScanSummary
+                {
+                    ScanType = evt.Tab,
+                    Timestamp = evt.Timestamp,
+                    Status = "Completed"
+                };
+
+                // Parse details for counts if available
+                if (evt.Details.Contains("entries"))
+                {
+                    var parts = evt.Details.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var part in parts)
+                    {
+                        if (int.TryParse(new string(part.Where(char.IsDigit).ToArray()), out int num))
+                        {
+                            if (part.Contains("CHECK", StringComparison.OrdinalIgnoreCase))
+                                scan.HighRiskFindings = num;
+                            else if (part.Contains("NOTE", StringComparison.OrdinalIgnoreCase))
+                                scan.MediumRiskFindings = num;
+                            else if (part.Contains("entries") || part.Contains("total"))
+                                scan.TotalFindings = num;
+                        }
+                    }
+                }
+
+                report.ScansPerformed.Add(scan);
+            }
+
+            // Extract remediation actions from events
+            var actionEvents = _events.Where(e =>
+                e.Action.Contains("cleanup", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("removed", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("deleted", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var evt in actionEvents)
+            {
+                report.ActionsTaken.Add(new ActionSummary
+                {
+                    ActionType = evt.Action,
+                    Timestamp = evt.Timestamp,
+                    Target = evt.Target,
+                    Result = evt.Severity == "ERROR" ? "Failed" : "Success",
+                    Details = evt.Details
+                });
+            }
+
+            // Get hardening actions from journal
+            var hardenEntries = HardenJournal.GetEntries();
+            foreach (var entry in hardenEntries)
+            {
+                if (!entry.IsRolledBack)
+                {
+                    report.HardeningActions.Add(new HardeningApplied
+                    {
+                        ActionName = entry.ActionName,
+                        Category = entry.Category,
+                        AppliedAt = entry.Timestamp,
+                        PreviousState = entry.PreviousState,
+                        NewState = entry.NewState
+                    });
+                }
+            }
+
+            // Add baseline info if exists
+            if (_baseline != null)
+            {
+                report.Baseline = new BaselineInfo
+                {
+                    CapturedAt = _baseline.CapturedAt,
+                    PersistenceEntriesCaptured = _baseline.PersistEntries?.Count ?? 0,
+                    HardeningActionsCaptured = _baseline.HardeningApplied?.Count ?? 0
+                };
+            }
+
+            // Extract key timeline events (filter to important ones)
+            var keyEvents = _events.Where(e =>
+                e.Severity == "CRITICAL" ||
+                e.Severity == "WARNING" ||
+                e.Action.Contains("scan", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("cleanup", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("baseline", StringComparison.OrdinalIgnoreCase) ||
+                e.Action.Contains("hardening", StringComparison.OrdinalIgnoreCase))
+                .Take(20)
+                .ToList();
+
+            foreach (var evt in keyEvents)
+            {
+                report.KeyEvents.Add(new TimelineEvent
+                {
+                    Timestamp = evt.Timestamp,
+                    EventType = evt.Tab,
+                    Description = $"[{evt.Tab}] {evt.Action} - {evt.Target}",
+                    Severity = evt.Severity
+                });
+            }
+
+            return report;
+        }
+    }
+
     private static string GetOsDescription()
     {
         try
