@@ -589,3 +589,4 @@ Built for MSPs, IT teams, and security professionals who need portable incident 
 [Download Latest Release](https://github.com/jtarkington77/ViperKit/releases) | [Report Issue](https://github.com/jtarkington77/ViperKit/issues)
 
 </div>
+
